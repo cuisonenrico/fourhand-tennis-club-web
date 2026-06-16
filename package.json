@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@react-email/components": "^0.0.32",
+    "@radix-ui/react-slot": "^1.1.1",
+    "@react-email/render": "^1.0.3",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",
     "class-variance-authority": "^0.7.1",
