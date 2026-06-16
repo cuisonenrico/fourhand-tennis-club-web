@@ -65,7 +65,7 @@ export const HERO_IMAGE =
   "https://images.unsplash.com/photo-1542144582-1ba00456b5e3?auto=format&fit=crop&w=2000&q=75";
 
 export const ABOUT_IMAGE =
-  "https://images.unsplash.com/photo-1617083934555-ac7b4c0e7d6a?auto=format&fit=crop&w=1200&q=70";
+  "https://images.unsplash.com/photo-1551773188-0801da12ddae?auto=format&fit=crop&w=1200&q=70";
 
 export interface TeaserEvent {
   type: "Competition" | "Class" | "Workshop";
