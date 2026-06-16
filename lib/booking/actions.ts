@@ -26,7 +26,10 @@ export async function holdSlotAction(input: unknown): Promise<HoldResult> {
     p_minutes: 5,
   });
 
-  if (error) return { ok: false, error: "unavailable" };
+  if (error) {
+    console.error("[holdSlotAction] hold_slot rpc error:", error);
+    return { ok: false, error: "unavailable" };
+  }
   return { ok: true, expiresAt: data as string };
 }
 
@@ -49,9 +52,11 @@ export async function confirmBookingAction(input: unknown): Promise<ConfirmResul
   });
 
   if (error) {
+    console.error("[confirmBookingAction] confirm_booking rpc error:", error);
     return { status: "error", message: "We couldn't confirm that slot. Please try again." };
   }
 
+  console.info("[confirmBookingAction] confirm_booking returned:", JSON.stringify(data));
   const result = (Array.isArray(data) ? data[0] : data) as ConfirmBookingResult | undefined;
   if (!result || result.status === "slot_taken") {
     return { status: "slot_taken" };
