@@ -32,20 +32,8 @@ create policy "admins read bookings"
 -- event_signups and email_log have NO policies: anon/authenticated are denied;
 -- only the service role (which bypasses RLS) can touch them.
 
--- ---------------------------------------------------------------------------
--- Function execution: lock the write RPCs to the service role only.
--- ---------------------------------------------------------------------------
-revoke execute on function hold_slot(uuid, text, int) from public;
-revoke execute on function confirm_booking(uuid, text, text, text, text, text) from public;
-revoke execute on function cancel_booking(uuid) from public;
-revoke execute on function release_expired_holds() from public;
-revoke execute on function generate_slots_for_range(date, date) from public;
-
-grant execute on function hold_slot(uuid, text, int) to service_role;
-grant execute on function confirm_booking(uuid, text, text, text, text, text) to service_role;
-grant execute on function cancel_booking(uuid) to service_role;
-grant execute on function release_expired_holds() to service_role;
-grant execute on function generate_slots_for_range(date, date) to service_role;
+-- NOTE: EXECUTE grants on the write RPCs live at the end of 0003_functions.sql,
+-- since the functions must exist before they can be granted.
 
 -- ---------------------------------------------------------------------------
 -- Realtime: stream slot + booking changes to connected clients (Tech doc §8).

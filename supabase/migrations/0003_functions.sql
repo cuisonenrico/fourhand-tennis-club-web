@@ -255,3 +255,19 @@ begin
   return v_count;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Function execution: lock the write RPCs to the service role only.
+-- (Defined here, after the functions exist; referenced by the RLS model.)
+-- ---------------------------------------------------------------------------
+revoke execute on function hold_slot(uuid, text, int) from public;
+revoke execute on function confirm_booking(uuid, text, text, text, text, text) from public;
+revoke execute on function cancel_booking(uuid) from public;
+revoke execute on function release_expired_holds() from public;
+revoke execute on function generate_slots_for_range(date, date) from public;
+
+grant execute on function hold_slot(uuid, text, int) to service_role;
+grant execute on function confirm_booking(uuid, text, text, text, text, text) to service_role;
+grant execute on function cancel_booking(uuid) to service_role;
+grant execute on function release_expired_holds() to service_role;
+grant execute on function generate_slots_for_range(date, date) to service_role;
