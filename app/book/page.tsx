@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCourtsWithAvailability, getPricingRules } from "@/lib/booking/queries";
 import { ensureSlotsForDate } from "@/lib/booking/ensure-slots";
 import { isWithinHorizon, maxDateKey, todayKey, upcomingDateKeys, QUICK_DATE_CHIPS } from "@/lib/utils";
 import { CourtGrid } from "@/components/booking/court-grid";
+import { BookHeader, BookingBoardSkeleton } from "@/components/booking/booking-skeleton";
 
 export const metadata: Metadata = {
   title: "Book a court",
@@ -24,14 +26,13 @@ export default async function BookPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-charcoal sm:text-4xl">Book a court</h1>
-        <p className="mt-2 max-w-xl text-charcoal/70">
-          Tap a court to see what&apos;s free. Pick one or more times, confirm — that&apos;s it.
-        </p>
-      </header>
+      <BookHeader />
 
-      <BookingBoard dateKey={dateKey} dateKeys={dateKeys} initialCourtId={initialCourtId} />
+      {/* The shell renders immediately; the live board streams in behind a
+          skeleton so navigation never feels blocked. */}
+      <Suspense key={`${dateKey}:${initialCourtId ?? ""}`} fallback={<BookingBoardSkeleton />}>
+        <BookingBoard dateKey={dateKey} dateKeys={dateKeys} initialCourtId={initialCourtId} />
+      </Suspense>
     </div>
   );
 }
@@ -46,13 +47,15 @@ async function BookingBoard({
   initialCourtId?: string;
 }) {
   try {
-    // Make sure the requested day has slots (lazy generation for far dates).
-    await ensureSlotsForDate(dateKey);
-
     const supabase = await createClient();
+    // Pricing is independent of slot generation — fetch it in parallel.
+    const pricingPromise = getPricingRules(supabase);
+    // Ensure the requested day has slots (lazy generation for far dates) before
+    // reading availability.
+    await ensureSlotsForDate(dateKey);
     const [courts, pricingRules] = await Promise.all([
       getCourtsWithAvailability(supabase, dateKey),
-      getPricingRules(supabase),
+      pricingPromise,
     ]);
 
     if (courts.length === 0) {
