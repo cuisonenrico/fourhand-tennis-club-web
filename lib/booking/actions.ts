@@ -56,7 +56,6 @@ export async function confirmBookingAction(input: unknown): Promise<ConfirmResul
     return { status: "error", message: "We couldn't confirm that slot. Please try again." };
   }
 
-  console.info("[confirmBookingAction] confirm_booking returned:", JSON.stringify(data));
   const result = (Array.isArray(data) ? data[0] : data) as ConfirmBookingResult | undefined;
   if (!result || result.status === "slot_taken") {
     return { status: "slot_taken" };

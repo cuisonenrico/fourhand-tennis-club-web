@@ -144,6 +144,10 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+-- RETURNS TABLE out-columns (cancel_token, status, …) share names with
+-- bookings columns. Resolve any ambiguous reference to the COLUMN so the
+-- INSERT ... RETURNING below is not mistaken for a variable (error 42702).
+#variable_conflict use_column
 declare
   v_existing bookings%rowtype;
   v_slot slots%rowtype;
