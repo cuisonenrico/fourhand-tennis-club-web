@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+/*
+  Fourhand Tennis Club design tokens (Plan §11.1).
+  Green dominates; purple/pink stay as restrained accents.
+*/
+@theme {
+  --color-green: #00b050;
+  --color-green-600: #009a45;
+  --color-green-50: #e6f7ee;
+
+  --color-charcoal: #3e3e42;
+  --color-purple: #7b5ba7;
+  --color-pink: #e56cb5;
+  --color-surface: #e8e8e8;
+
+  --color-background: #ffffff;
+  --color-foreground: #3e3e42;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 1rem;
+
+  --shadow-soft: 0 1px 2px rgba(62, 62, 66, 0.06), 0 8px 24px rgba(62, 62, 66, 0.08);
+  --shadow-lift: 0 4px 12px rgba(0, 176, 80, 0.18), 0 12px 32px rgba(62, 62, 66, 0.12);
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Honour reduced-motion globally (Plan §12.1). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Skeleton shimmer for image-heavy pages. */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.6),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}

@@ -1,0 +1,19 @@
+# Minimal Supabase CLI config for local development.
+# `supabase start` boots Postgres + Auth + Realtime + Storage locally,
+# then `supabase db reset` applies migrations + seed.sql.
+project_id = "fourhand-tennis-club"
+
+[db]
+port = 54322
+major_version = 15
+
+[realtime]
+enabled = true
+
+[storage]
+enabled = true
+
+[auth]
+enabled = true
+# Admin accounts are created by the owner — no public sign-up.
+enable_signup = false
