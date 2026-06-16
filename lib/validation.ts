@@ -12,13 +12,27 @@ export const guestSchema = z.object({
     .regex(/^[0-9+()\-\s]+$/, "Enter a valid phone number"),
 });
 
+/** Up to 8 hours (slots) in a single booking. */
+const slotIds = z.array(z.string().uuid()).min(1, "Pick at least one time").max(8, "Up to 8 hours per booking");
+
 export const holdSchema = z.object({
   slot_id: z.string().uuid(),
   hold_key: z.string().min(8).max(64),
 });
 
+export const holdSlotsSchema = z.object({
+  slot_ids: slotIds,
+  hold_key: z.string().min(8).max(64),
+});
+
 export const confirmBookingSchema = guestSchema.extend({
   slot_id: z.string().uuid(),
+  hold_key: z.string().min(8).max(64),
+  idempotency_key: z.string().min(8).max(64),
+});
+
+export const confirmBookingMultiSchema = guestSchema.extend({
+  slot_ids: slotIds,
   hold_key: z.string().min(8).max(64),
   idempotency_key: z.string().min(8).max(64),
 });

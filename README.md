@@ -12,7 +12,7 @@ instant confirmation email. Built per the product & technical specs in `docs/sup
 - **Transactional email** — booking confirmation (+`.ics`), staff notification, cancellation, contact ack. Queued via `email_log`.
 - **Minimum admin** — secure Supabase Auth login + read-only, live booked-courts overview.
 
-Decisions baked in: reserve-only (no payments), fixed 60-minute slots, guest-only booking (admin still authenticated), 6 seeded courts, hours 06:00–22:00.
+Decisions baked in: reserve-only (no payments), 60-minute slots **bookable in multiples (up to 8 hours per booking)**, guest-only booking (admin still authenticated), 6 seeded courts, hours 06:00–22:00, **90-day booking horizon** (slots generated on demand for far dates).
 
 ## Getting started
 
@@ -46,8 +46,9 @@ service role.
 
 ```bash
 npm test                     # vitest: pricing + .ics units
-# Booking concurrency (needs a running Postgres):
+# Booking concurrency + group bookings (need a running Postgres):
 psql "$DATABASE_URL" -f supabase/tests/confirm_booking.test.sql
+psql "$DATABASE_URL" -f supabase/tests/confirm_booking_multi.test.sql
 ```
 
 ## How the booking integrity works (the critical path)

@@ -3,28 +3,28 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatDateLong, formatTimeRange } from "@/lib/utils";
+import { formatDateLong, formatTime } from "@/lib/utils";
+
+export interface SuccessSession {
+  startsAt: string;
+  endsAt: string;
+}
 
 export function BookingSuccess({
   courtName,
-  startsAt,
-  endsAt,
+  sessions,
   priceLabel,
   onBookAnother,
 }: {
   courtName: string;
-  startsAt: string;
-  endsAt: string;
+  sessions: SuccessSession[];
   priceLabel: string;
   onBookAnother: () => void;
 }) {
   const reduce = useReducedMotion();
+  const hours = sessions.length;
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="flex flex-col items-center text-center"
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center text-center">
       <motion.span
         initial={reduce ? { opacity: 0 } : { scale: 0, rotate: -20 }}
         animate={reduce ? { opacity: 1 } : { scale: 1, rotate: 0 }}
@@ -41,9 +41,17 @@ export function BookingSuccess({
 
       <div className="mt-5 w-full rounded-card bg-green-50 p-4 text-left">
         <p className="font-semibold text-charcoal">{courtName}</p>
-        <p className="text-sm text-charcoal/70">{formatDateLong(startsAt)}</p>
-        <p className="text-sm text-charcoal/70">{formatTimeRange(startsAt, endsAt)} · 60 min</p>
-        <p className="mt-1 text-sm font-semibold text-green-600">{priceLabel} — pay at the club</p>
+        <p className="text-sm text-charcoal/70">{sessions[0] && formatDateLong(sessions[0].startsAt)}</p>
+        <ul className="mt-2 space-y-1">
+          {sessions.map((s, i) => (
+            <li key={i} className="text-sm text-charcoal/80">
+              {formatTime(s.startsAt)} – {formatTime(s.endsAt)}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-sm font-semibold text-green-600">
+          {hours} hour{hours === 1 ? "" : "s"} · {priceLabel} — pay at the club
+        </p>
       </div>
 
       <Button onClick={onBookAnother} variant="outline" className="mt-6 w-full">

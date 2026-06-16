@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildBookingIcs } from "@/lib/ics";
+import { buildBookingIcs, buildBookingIcsMulti } from "@/lib/ics";
 
 describe("buildBookingIcs", () => {
   const ics = buildBookingIcs({
@@ -25,5 +25,28 @@ describe("buildBookingIcs", () => {
 
   it("encodes the UTC start time", () => {
     expect(ics).toMatch(/DTSTART:20260701T020000Z/);
+  });
+});
+
+describe("buildBookingIcsMulti", () => {
+  const ics = buildBookingIcsMulti({
+    courtName: "Court 1 — Centre",
+    guestName: "Ana Cruz",
+    sessions: [
+      { startsAt: "2026-07-01T02:00:00Z", endsAt: "2026-07-01T03:00:00Z" },
+      { startsAt: "2026-07-01T03:00:00Z", endsAt: "2026-07-01T04:00:00Z" },
+      { startsAt: "2026-07-01T04:00:00Z", endsAt: "2026-07-01T05:00:00Z" },
+    ],
+  });
+
+  it("emits one VEVENT per booked hour", () => {
+    const count = (ics.match(/BEGIN:VEVENT/g) ?? []).length;
+    expect(count).toBe(3);
+  });
+
+  it("encodes each consecutive start time", () => {
+    expect(ics).toMatch(/DTSTART:20260701T020000Z/);
+    expect(ics).toMatch(/DTSTART:20260701T030000Z/);
+    expect(ics).toMatch(/DTSTART:20260701T040000Z/);
   });
 });

@@ -1,21 +1,25 @@
 import "server-only";
 
 import { queueEmail } from "@/lib/email/mailer";
-import { buildBookingIcs } from "@/lib/ics";
+import { buildBookingIcsMulti } from "@/lib/ics";
 import { formatDateLong, formatTimeRange, formatPrice } from "@/lib/utils";
 import BookingConfirmation from "@/emails/booking-confirmation";
 import StaffNewBooking from "@/emails/staff-new-booking";
 import Cancellation from "@/emails/cancellation";
 import ContactAck from "@/emails/contact-ack";
 
-interface BookingEmailContext {
-  courtName: string;
+interface Session {
   startsAt: string;
   endsAt: string;
+}
+
+interface BookingEmailContext {
+  courtName: string;
+  sessions: Session[];
   guestName: string;
   guestEmail: string;
   guestPhone: string;
-  priceCents: number;
+  totalPriceCents: number;
   cancelToken: string;
 }
 
@@ -26,18 +30,27 @@ function siteUrl(path: string): string {
 
 const MAP_URL = "https://maps.google.com/?q=Fourhand+Tennis+Club";
 
+/** Human label for the day(s) a booking spans. */
+function dateLabel(sessions: Session[]): string {
+  return formatDateLong(sessions[0].startsAt);
+}
+
+/** "6:00 PM – 7:00 PM, 7:00 PM – 8:00 PM" across all booked hours. */
+function timeLabels(sessions: Session[]): string[] {
+  return sessions.map((s) => formatTimeRange(s.startsAt, s.endsAt));
+}
+
 /** Player confirmation (with .ics) + staff notification. Never throws. */
 export async function sendBookingEmails(ctx: BookingEmailContext): Promise<void> {
-  const dateLabel = formatDateLong(ctx.startsAt);
-  const timeLabel = formatTimeRange(ctx.startsAt, ctx.endsAt);
-  const priceLabel = formatPrice(ctx.priceCents);
+  const times = timeLabels(ctx.sessions);
+  const date = dateLabel(ctx.sessions);
+  const priceLabel = formatPrice(ctx.totalPriceCents);
   const cancelUrl = siteUrl(`/cancel/${ctx.cancelToken}`);
 
-  const ics = buildBookingIcs({
+  const ics = buildBookingIcsMulti({
     courtName: ctx.courtName,
-    startsAt: ctx.startsAt,
-    endsAt: ctx.endsAt,
     guestName: ctx.guestName,
+    sessions: ctx.sessions,
   });
 
   await queueEmail({
@@ -47,14 +60,14 @@ export async function sendBookingEmails(ctx: BookingEmailContext): Promise<void>
     react: BookingConfirmation({
       guestName: ctx.guestName,
       courtName: ctx.courtName,
-      dateLabel,
-      timeLabel,
+      dateLabel: date,
+      timeLabels: times,
       priceLabel,
       cancelUrl,
       mapUrl: MAP_URL,
     }),
     attachments: [{ filename: "fourhand-booking.ics", content: ics }],
-    payload: { cancelToken: ctx.cancelToken, startsAt: ctx.startsAt },
+    payload: { cancelToken: ctx.cancelToken, sessions: ctx.sessions },
   });
 
   const staffEmail = process.env.STAFF_EMAIL;
@@ -62,11 +75,11 @@ export async function sendBookingEmails(ctx: BookingEmailContext): Promise<void>
     await queueEmail({
       type: "staff_new_booking",
       to: staffEmail,
-      subject: `New booking — ${ctx.courtName}, ${dateLabel}`,
+      subject: `New booking — ${ctx.courtName}, ${date}`,
       react: StaffNewBooking({
         courtName: ctx.courtName,
-        dateLabel,
-        timeLabel,
+        dateLabel: date,
+        timeLabels: times,
         guestName: ctx.guestName,
         guestEmail: ctx.guestEmail,
         guestPhone: ctx.guestPhone,
@@ -78,10 +91,9 @@ export async function sendBookingEmails(ctx: BookingEmailContext): Promise<void>
 
 export async function sendCancellationEmail(ctx: {
   courtName: string;
-  startsAt: string;
-  endsAt: string;
   guestName: string;
   guestEmail: string;
+  sessions: Session[];
 }): Promise<void> {
   await queueEmail({
     type: "cancellation",
@@ -90,8 +102,8 @@ export async function sendCancellationEmail(ctx: {
     react: Cancellation({
       guestName: ctx.guestName,
       courtName: ctx.courtName,
-      dateLabel: formatDateLong(ctx.startsAt),
-      timeLabel: formatTimeRange(ctx.startsAt, ctx.endsAt),
+      dateLabel: dateLabel(ctx.sessions),
+      timeLabels: timeLabels(ctx.sessions),
       bookUrl: siteUrl("/book"),
     }),
   });

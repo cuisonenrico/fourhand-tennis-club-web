@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getCourtsWithAvailability, getPricingRules } from "@/lib/booking/queries";
-import { todayKey, upcomingDateKeys } from "@/lib/utils";
+import { ensureSlotsForDate } from "@/lib/booking/ensure-slots";
+import { isWithinHorizon, maxDateKey, todayKey, upcomingDateKeys, QUICK_DATE_CHIPS } from "@/lib/utils";
 import { CourtGrid } from "@/components/booking/court-grid";
 
 export const metadata: Metadata = {
@@ -17,8 +18,8 @@ export default async function BookPage({
   searchParams: Promise<{ court?: string; date?: string }>;
 }) {
   const params = await searchParams;
-  const dateKeys = upcomingDateKeys(14);
-  const dateKey = params.date && dateKeys.includes(params.date) ? params.date : todayKey();
+  const dateKeys = upcomingDateKeys(QUICK_DATE_CHIPS);
+  const dateKey = params.date && isWithinHorizon(params.date) ? params.date : todayKey();
   const initialCourtId = params.court && UUID_RE.test(params.court) ? params.court : undefined;
 
   return (
@@ -26,7 +27,7 @@ export default async function BookPage({
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-charcoal sm:text-4xl">Book a court</h1>
         <p className="mt-2 max-w-xl text-charcoal/70">
-          Tap a court to see what&apos;s free. Pick a time, confirm — that&apos;s it.
+          Tap a court to see what&apos;s free. Pick one or more times, confirm — that&apos;s it.
         </p>
       </header>
 
@@ -45,6 +46,9 @@ async function BookingBoard({
   initialCourtId?: string;
 }) {
   try {
+    // Make sure the requested day has slots (lazy generation for far dates).
+    await ensureSlotsForDate(dateKey);
+
     const supabase = await createClient();
     const [courts, pricingRules] = await Promise.all([
       getCourtsWithAvailability(supabase, dateKey),
@@ -61,6 +65,7 @@ async function BookingBoard({
         pricingRules={pricingRules}
         initialDateKey={dateKey}
         dateKeys={dateKeys}
+        maxDateKey={maxDateKey()}
         initialCourtId={initialCourtId}
       />
     );

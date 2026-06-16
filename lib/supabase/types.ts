@@ -44,6 +44,7 @@ export interface Booking {
   status: BookingStatus;
   idempotency_key: string;
   cancel_token: string;
+  booking_group_id: string | null;
   created_at: string;
 }
 
@@ -66,10 +67,18 @@ export interface EmailLog {
   created_at: string;
 }
 
-/** Shape returned by the confirm_booking RPC. */
+/** Shape returned by the confirm_booking RPC (single slot). */
 export interface ConfirmBookingResult {
   booking_id: string;
   cancel_token: string;
   price_cents: number;
+  status: "confirmed" | "slot_taken";
+}
+
+/** Shape returned by the confirm_booking_multi RPC (group of slots). */
+export interface ConfirmMultiResult {
+  booking_group_id: string;
+  cancel_token: string;
+  total_price_cents: number;
   status: "confirmed" | "slot_taken";
 }

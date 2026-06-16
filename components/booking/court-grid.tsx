@@ -8,7 +8,7 @@ import {
   getSlotsForCourt,
   type CourtAvailability,
 } from "@/lib/booking/queries";
-import { holdSlotAction, confirmBookingAction } from "@/lib/booking/actions";
+import { holdSlotsAction, confirmBookingMultiAction, ensureSlotsAction } from "@/lib/booking/actions";
 import { resolvePriceCents } from "@/lib/pricing";
 import { formatPrice, formatDateLong } from "@/lib/utils";
 import type { PricingRule, Slot } from "@/lib/supabase/types";
@@ -23,8 +23,7 @@ type Phase = "slots" | "confirm" | "success";
 
 interface SuccessInfo {
   courtName: string;
-  startsAt: string;
-  endsAt: string;
+  sessions: { startsAt: string; endsAt: string }[];
   priceLabel: string;
 }
 
@@ -33,12 +32,14 @@ export function CourtGrid({
   pricingRules,
   initialDateKey,
   dateKeys,
+  maxDateKey,
   initialCourtId,
 }: {
   initialCourts: CourtAvailability[];
   pricingRules: PricingRule[];
   initialDateKey: string;
   dateKeys: string[];
+  maxDateKey: string;
   initialCourtId?: string;
 }) {
   const supabase = useMemo(() => createClient(), []);
@@ -48,25 +49,26 @@ export function CourtGrid({
   const [selectedCourtId, setSelectedCourtId] = useState<string | null>(initialCourtId ?? null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+  const [selectedSlots, setSelectedSlots] = useState<Slot[]>([]);
   const [phase, setPhase] = useState<Phase>("slots");
   const [holdKey, setHoldKey] = useState<string | null>(null);
   const [idemKey, setIdemKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [holding, setHolding] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [success, setSuccess] = useState<SuccessInfo | null>(null);
 
-  // Refs keep the realtime handler from closing over stale state.
   const dateRef = useRef(dateKey);
   const courtRef = useRef(selectedCourtId);
+  const phaseRef = useRef(phase);
   dateRef.current = dateKey;
   courtRef.current = selectedCourtId;
+  phaseRef.current = phase;
 
   const selectedCourt = courts.find((c) => c.id === selectedCourtId) ?? null;
-  const priceLabel = useCallback(
-    (slot: Slot) => formatPrice(resolvePriceCents(slot.starts_at, pricingRules)),
-    [pricingRules],
-  );
+  const priceOf = useCallback((slot: Slot) => resolvePriceCents(slot.starts_at, pricingRules), [pricingRules]);
+  const priceLabel = useCallback((slot: Slot) => formatPrice(priceOf(slot)), [priceOf]);
+  const totalCents = selectedSlots.reduce((sum, s) => sum + priceOf(s), 0);
 
   const refreshAvailability = useCallback(
     async (dk: string) => {
@@ -83,7 +85,12 @@ export function CourtGrid({
     async (courtId: string, dk: string) => {
       setLoadingSlots(true);
       try {
-        setSlots(await getSlotsForCourt(supabase, courtId, dk));
+        const next = await getSlotsForCourt(supabase, courtId, dk);
+        setSlots(next);
+        // While picking, drop any selected slot that is no longer free.
+        if (phaseRef.current === "slots") {
+          setSelectedSlots((prev) => prev.filter((ps) => next.some((ns) => ns.id === ps.id && ns.status === "free")));
+        }
       } catch (err) {
         console.error("[booking] slot load failed:", err);
         setSlots([]);
@@ -94,13 +101,12 @@ export function CourtGrid({
     [supabase],
   );
 
-  // Live updates: a slot another player takes greys out without a refresh.
   useEffect(() => {
     const channel = supabase
       .channel("public:slots")
       .on("postgres_changes", { event: "*", schema: "public", table: "slots" }, () => {
         void refreshAvailability(dateRef.current);
-        if (courtRef.current) void loadSlots(courtRef.current, dateRef.current);
+        if (courtRef.current && phaseRef.current !== "success") void loadSlots(courtRef.current, dateRef.current);
       })
       .subscribe();
     return () => {
@@ -108,7 +114,6 @@ export function CourtGrid({
     };
   }, [supabase, refreshAvailability, loadSlots]);
 
-  // Open the deep-linked court on first render.
   useEffect(() => {
     if (initialCourtId) void loadSlots(initialCourtId, initialDateKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,7 +122,7 @@ export function CourtGrid({
   function openCourt(courtId: string) {
     setSelectedCourtId(courtId);
     setPhase("slots");
-    setSelectedSlot(null);
+    setSelectedSlots([]);
     setPanelError(null);
     setSuccess(null);
     void loadSlots(courtId, dateKey);
@@ -126,41 +131,54 @@ export function CourtGrid({
   function closePanel() {
     setSelectedCourtId(null);
     setPhase("slots");
-    setSelectedSlot(null);
+    setSelectedSlots([]);
     setPanelError(null);
     setSuccess(null);
   }
 
   async function changeDate(dk: string) {
     setDateKey(dk);
-    setSelectedSlot(null);
+    setSelectedSlots([]);
     setPanelError(null);
+    await ensureSlotsAction(dk);
     await refreshAvailability(dk);
     if (selectedCourtId) await loadSlots(selectedCourtId, dk);
   }
 
-  async function selectSlot(slot: Slot) {
+  function toggleSlot(slot: Slot) {
+    if (slot.status !== "free") return;
+    setPanelError(null);
+    setSelectedSlots((prev) =>
+      prev.some((s) => s.id === slot.id) ? prev.filter((s) => s.id !== slot.id) : [...prev, slot],
+    );
+  }
+
+  async function continueToConfirm() {
+    if (selectedSlots.length === 0) return;
+    setHolding(true);
     setPanelError(null);
     const key = crypto.randomUUID();
-    const result = await holdSlotAction({ slot_id: slot.id, hold_key: key });
+    const ids = selectedSlots.map((s) => s.id);
+    const result = await holdSlotsAction({ slot_ids: ids, hold_key: key });
+    setHolding(false);
     if (!result.ok) {
-      setPanelError("Someone just grabbed that slot. Pick another time.");
+      setPanelError("One of those times was just taken. Please adjust your selection.");
       if (selectedCourtId) await loadSlots(selectedCourtId, dateKey);
       return;
     }
     setHoldKey(key);
     setIdemKey(crypto.randomUUID());
-    setSelectedSlot(slot);
     setPhase("confirm");
   }
 
   async function confirm(details: GuestDetails) {
-    if (!selectedSlot || !holdKey || !idemKey || !selectedCourt) return;
+    if (selectedSlots.length === 0 || !holdKey || !idemKey || !selectedCourt) return;
     setSubmitting(true);
     setPanelError(null);
-    const result = await confirmBookingAction({
+    const ordered = [...selectedSlots].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    const result = await confirmBookingMultiAction({
       ...details,
-      slot_id: selectedSlot.id,
+      slot_ids: ordered.map((s) => s.id),
       hold_key: holdKey,
       idempotency_key: idemKey,
     });
@@ -169,26 +187,28 @@ export function CourtGrid({
     if (result.status === "confirmed") {
       setSuccess({
         courtName: selectedCourt.name,
-        startsAt: selectedSlot.starts_at,
-        endsAt: selectedSlot.ends_at,
-        priceLabel: formatPrice(result.priceCents),
+        sessions: ordered.map((s) => ({ startsAt: s.starts_at, endsAt: s.ends_at })),
+        priceLabel: formatPrice(result.totalPriceCents),
       });
       setPhase("success");
       void refreshAvailability(dateKey);
       void loadSlots(selectedCourt.id, dateKey);
     } else if (result.status === "slot_taken") {
-      setPanelError("That slot was just taken. Please choose another.");
+      setPanelError("One of those times was just taken. Please choose again.");
       setPhase("slots");
+      setSelectedSlots([]);
       await loadSlots(selectedCourt.id, dateKey);
     } else {
       setPanelError(result.message);
     }
   }
 
+  const orderedSelection = [...selectedSlots].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+
   return (
     <>
       <div className="mb-6">
-        <DateControl dateKeys={dateKeys} value={dateKey} onChange={changeDate} />
+        <DateControl dateKeys={dateKeys} value={dateKey} onChange={changeDate} maxDateKey={maxDateKey} />
       </div>
 
       <motion.div layout className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3">
@@ -212,20 +232,26 @@ export function CourtGrid({
           <SlotsView
             dateKeys={dateKeys}
             dateKey={dateKey}
+            maxDateKey={maxDateKey}
             onChangeDate={changeDate}
             slots={slots}
             loading={loadingSlots}
             error={panelError}
             priceLabel={priceLabel}
-            onSelectSlot={selectSlot}
+            selectedIds={new Set(selectedSlots.map((s) => s.id))}
+            onToggleSlot={toggleSlot}
+            selectionCount={selectedSlots.length}
+            totalLabel={formatPrice(totalCents)}
+            holding={holding}
+            onContinue={continueToConfirm}
           />
         )}
 
-        {phase === "confirm" && selectedSlot && selectedCourt && (
+        {phase === "confirm" && selectedCourt && orderedSelection.length > 0 && (
           <ConfirmForm
             courtName={selectedCourt.name}
-            slot={selectedSlot}
-            priceLabel={priceLabel(selectedSlot)}
+            slots={orderedSelection}
+            totalPriceLabel={formatPrice(totalCents)}
             submitting={submitting}
             onBack={() => setPhase("slots")}
             onConfirm={confirm}
@@ -235,8 +261,7 @@ export function CourtGrid({
         {phase === "success" && success && (
           <BookingSuccess
             courtName={success.courtName}
-            startsAt={success.startsAt}
-            endsAt={success.endsAt}
+            sessions={success.sessions}
             priceLabel={success.priceLabel}
             onBookAnother={closePanel}
           />
@@ -249,29 +274,42 @@ export function CourtGrid({
 function SlotsView({
   dateKeys,
   dateKey,
+  maxDateKey,
   onChangeDate,
   slots,
   loading,
   error,
   priceLabel,
-  onSelectSlot,
+  selectedIds,
+  onToggleSlot,
+  selectionCount,
+  totalLabel,
+  holding,
+  onContinue,
 }: {
   dateKeys: string[];
   dateKey: string;
+  maxDateKey: string;
   onChangeDate: (dk: string) => void;
   slots: Slot[];
   loading: boolean;
   error: string | null;
   priceLabel: (slot: Slot) => string;
-  onSelectSlot: (slot: Slot) => void;
+  selectedIds: Set<string>;
+  onToggleSlot: (slot: Slot) => void;
+  selectionCount: number;
+  totalLabel: string;
+  holding: boolean;
+  onContinue: () => void;
 }) {
   return (
     <div>
-      <DateControl dateKeys={dateKeys} value={dateKey} onChange={onChangeDate} />
+      <DateControl dateKeys={dateKeys} value={dateKey} onChange={onChangeDate} maxDateKey={maxDateKey} />
 
-      {error && <p role="alert" className="mt-3 rounded-lg bg-pink/10 px-3 py-2 text-sm text-pink">{error}</p>}
+      <p className="mt-3 text-xs text-charcoal/60">Tap one or more times — book up to 8 hours at once.</p>
+      {error && <p role="alert" className="mt-2 rounded-lg bg-pink/10 px-3 py-2 text-sm text-pink">{error}</p>}
 
-      <div className="mt-4">
+      <div className="mt-3">
         <AnimatePresence mode="wait">
           <motion.div
             key={dateKey}
@@ -287,18 +325,16 @@ function SlotsView({
                 ))}
               </div>
             ) : slots.length === 0 ? (
-              <p className="py-8 text-center text-sm text-charcoal/60">
-                No slots for this day. Try another date.
-              </p>
+              <p className="py-8 text-center text-sm text-charcoal/60">No slots for this day. Try another date.</p>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 pb-24">
                 {slots.map((slot) => (
                   <SlotButton
                     key={slot.id}
                     slot={slot}
-                    selected={false}
+                    selected={selectedIds.has(slot.id)}
                     priceLabel={priceLabel(slot)}
-                    onSelect={() => onSelectSlot(slot)}
+                    onSelect={() => onToggleSlot(slot)}
                   />
                 ))}
               </div>
@@ -306,6 +342,35 @@ function SlotsView({
           </motion.div>
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {selectionCount > 0 && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 32 }}
+            className="sticky bottom-0 -mx-5 border-t border-surface bg-white/95 px-5 py-3 backdrop-blur"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm">
+                <span className="font-semibold text-charcoal">
+                  {selectionCount} hour{selectionCount === 1 ? "" : "s"}
+                </span>
+                <span className="text-charcoal/60"> · {totalLabel}</span>
+              </div>
+              <button
+                type="button"
+                onClick={onContinue}
+                disabled={holding}
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-green px-5 text-sm font-semibold text-white shadow-soft transition-all hover:bg-green-600 hover:shadow-lift active:scale-[0.98] disabled:opacity-60"
+              >
+                {holding ? "Holding…" : "Continue"}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -70,6 +70,21 @@ export function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+export function SessionList({ times }: { times: string[] }) {
+  return (
+    <>
+      {times.map((t, i) => (
+        <Text key={i} style={{ margin: "0 0 4px", fontSize: 15, color: BRAND.charcoal }}>
+          <span style={{ color: "#8a8a8f", display: "inline-block", width: 110 }}>
+            {i === 0 ? "Times" : ""}
+          </span>
+          <strong>{t}</strong>
+        </Text>
+      ))}
+    </>
+  );
+}
+
 export function EmailButton({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a

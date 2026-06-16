@@ -64,6 +64,12 @@ export function manilaDayRange(dateKey: string): { startIso: string; endIso: str
   return { startIso: start.toISOString(), endIso: end.toISOString() };
 }
 
+/** How far ahead players may book. */
+export const BOOKING_HORIZON_DAYS = 90;
+
+/** How many quick day-chips the date control shows before the date picker. */
+export const QUICK_DATE_CHIPS = 14;
+
 /** Date keys for the next `days` Manila days starting today (for the date picker). */
 export function upcomingDateKeys(days: number): string[] {
   const keys: string[] = [];
@@ -72,4 +78,15 @@ export function upcomingDateKeys(days: number): string[] {
     keys.push(toDateKey(new Date(base.getTime() + i * 24 * 60 * 60 * 1000)));
   }
   return keys;
+}
+
+/** The furthest bookable Manila date key. */
+export function maxDateKey(): string {
+  const base = new Date(`${todayKey()}T00:00:00+08:00`);
+  return toDateKey(new Date(base.getTime() + BOOKING_HORIZON_DAYS * 24 * 60 * 60 * 1000));
+}
+
+/** True if `dateKey` is within [today, today + horizon]. */
+export function isWithinHorizon(dateKey: string): boolean {
+  return dateKey >= todayKey() && dateKey <= maxDateKey();
 }

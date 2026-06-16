@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { guestSchema } from "@/lib/validation";
-import { formatDateLong, formatTimeRange } from "@/lib/utils";
+import { formatDateLong, formatTime } from "@/lib/utils";
 import type { Slot } from "@/lib/supabase/types";
 
 const inputClass =
@@ -19,21 +19,22 @@ export interface GuestDetails {
 
 export function ConfirmForm({
   courtName,
-  slot,
-  priceLabel,
+  slots,
+  totalPriceLabel,
   submitting,
   onBack,
   onConfirm,
 }: {
   courtName: string;
-  slot: Slot;
-  priceLabel: string;
+  slots: Slot[];
+  totalPriceLabel: string;
   submitting: boolean;
   onBack: () => void;
   onConfirm: (details: GuestDetails) => void;
 }) {
   const [details, setDetails] = useState<GuestDetails>({ guest_name: "", guest_email: "", guest_phone: "" });
   const [error, setError] = useState<string | null>(null);
+  const hours = slots.length;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,14 +56,22 @@ export function ConfirmForm({
       className="flex flex-col gap-4"
     >
       <button type="button" onClick={onBack} className="inline-flex w-fit items-center gap-1 text-sm font-medium text-charcoal/70 hover:text-green">
-        <ArrowLeft size={16} /> Change slot
+        <ArrowLeft size={16} /> Change times
       </button>
 
       <div className="rounded-card bg-green-50 p-4">
         <p className="font-semibold text-charcoal">{courtName}</p>
-        <p className="text-sm text-charcoal/70">{formatDateLong(slot.starts_at)}</p>
-        <p className="text-sm text-charcoal/70">{formatTimeRange(slot.starts_at, slot.ends_at)} · 60 min</p>
-        <p className="mt-1 text-sm font-semibold text-green-600">{priceLabel} — pay at the club</p>
+        <p className="text-sm text-charcoal/70">{slots[0] && formatDateLong(slots[0].starts_at)}</p>
+        <ul className="mt-2 space-y-1">
+          {slots.map((s) => (
+            <li key={s.id} className="text-sm text-charcoal/80">
+              {formatTime(s.starts_at)} – {formatTime(s.ends_at)}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-sm font-semibold text-green-600">
+          {hours} hour{hours === 1 ? "" : "s"} · {totalPriceLabel} — pay at the club
+        </p>
       </div>
 
       <div className="space-y-3">
@@ -86,7 +95,7 @@ export function ConfirmForm({
       {error && <p role="alert" className="rounded-lg bg-pink/10 px-3 py-2 text-sm text-pink">{error}</p>}
 
       <Button type="submit" size="lg" disabled={submitting} className="w-full">
-        {submitting ? "Confirming…" : "Confirm booking"}
+        {submitting ? "Confirming…" : `Confirm ${hours} hour${hours === 1 ? "" : "s"}`}
       </Button>
       <p className="text-center text-xs text-charcoal/50">No account needed · instant email confirmation</p>
     </motion.form>
