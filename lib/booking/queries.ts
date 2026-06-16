@@ -10,6 +10,20 @@ export interface CourtAvailability extends Court {
   tileState: CourtTileState;
 }
 
+/**
+ * Holds expire lazily: a `held` slot whose hold has lapsed is effectively free,
+ * with no scheduled job required. The hold/confirm RPCs already re-acquire
+ * expired holds; this keeps the read side consistent. Any periodic cleanup that
+ * flips the stored status back to 'free' is then purely cosmetic.
+ */
+function holdExpired(holdExpiresAt: string | null): boolean {
+  return !!holdExpiresAt && new Date(holdExpiresAt).getTime() < Date.now();
+}
+
+function isEffectivelyFree(status: string, holdExpiresAt: string | null): boolean {
+  return status === "free" || (status === "held" && holdExpired(holdExpiresAt));
+}
+
 /** All active courts in display order. */
 export async function getCourts(supabase: SupabaseClient): Promise<Court[]> {
   const { data, error } = await supabase
@@ -42,7 +56,12 @@ export async function getSlotsForCourt(
     .lt("starts_at", endIso)
     .order("starts_at");
   if (error) throw error;
-  return (data ?? []) as Slot[];
+  // Present lapsed holds as free so they're immediately bookable again.
+  return ((data ?? []) as Slot[]).map((slot) =>
+    slot.status === "held" && holdExpired(slot.hold_expires_at)
+      ? { ...slot, status: "free", hold_key: null, hold_expires_at: null }
+      : slot,
+  );
 }
 
 /** Courts annotated with free-slot counts for a given day → drives tile state. */
@@ -55,16 +74,16 @@ export async function getCourtsWithAvailability(
 
   const { data: slots, error } = await supabase
     .from("slots")
-    .select("court_id,status")
+    .select("court_id,status,hold_expires_at")
     .gte("starts_at", startIso)
     .lt("starts_at", endIso);
   if (error) throw error;
 
   const counts = new Map<string, { free: number; total: number }>();
-  for (const s of (slots ?? []) as Pick<Slot, "court_id" | "status">[]) {
+  for (const s of (slots ?? []) as Pick<Slot, "court_id" | "status" | "hold_expires_at">[]) {
     const c = counts.get(s.court_id) ?? { free: 0, total: 0 };
     c.total += 1;
-    if (s.status === "free") c.free += 1;
+    if (isEffectivelyFree(s.status, s.hold_expires_at)) c.free += 1;
     counts.set(s.court_id, c);
   }
 

@@ -64,7 +64,8 @@ makes retries safe. Two simultaneous confirms → exactly one wins (see the SQL 
 - **Court photography** — `lib/data/site.ts` uses Unsplash placeholders; swap for Supabase Storage URLs (`// SWAP POINT` comments).
 - **Payments (Stripe)** — out of MVP; the confirm step is the natural insertion point.
 - **Player accounts / My Account** — guest-only for now.
-- **Full admin** (CRUD, pricing UI, members, reports), **reminders** (24h/1–2h) and **waitlist** — later phases. `release-holds` cron is wired (`vercel.json`).
+- **Full admin** (CRUD, pricing UI, members, reports), **reminders** (24h/1–2h) and **waitlist** — later phases.
+- **Hold expiry** needs no scheduler: abandoned holds expire **lazily on read**, so a stale hold is bookable again immediately. The `release-holds` cron is just cosmetic cleanup — `vercel.json` runs it daily (Vercel Hobby allows one cron/day). For frequent in-DB sweeps at no cost, apply `supabase/optional_pg_cron.sql` (Supabase pg_cron) and you can drop the Vercel cron.
 
 ## Project layout
 
