@@ -61,6 +61,56 @@ export const AMENITIES: Amenity[] = [
   { title: "Café", description: "Coffee, cold drinks and post-match snacks.", icon: "Coffee" },
 ];
 
+export interface FacilityZone {
+  id: "courts" | "drills" | "lounge" | "parking";
+  label: string;
+  description: string;
+  stat: string;
+  /** Solid zone fill. */
+  color: string;
+  /** Light tint for the legend swatch background. */
+  tint: string;
+}
+
+/**
+ * Zones of the club footprint, mirroring the facility blueprint
+ * (green = match courts, orange = drill courts, blue = lounge, yellow = parking).
+ */
+export const FACILITY_ZONES: FacilityZone[] = [
+  {
+    id: "courts",
+    label: "Match courts",
+    description: "Six full-size courts — hard, clay and grass, most under floodlights.",
+    stat: "6 courts",
+    color: "#00b050",
+    tint: "#e6f7ee",
+  },
+  {
+    id: "drills",
+    label: "Drill courts",
+    description: "Compact coaching courts for clinics, ball-machine sessions and footwork drills.",
+    stat: "2 courts",
+    color: "#f5832a",
+    tint: "#fdecdc",
+  },
+  {
+    id: "lounge",
+    label: "Lounge & café",
+    description: "Unwind after a match — café, soft seating and a view over the courts.",
+    stat: "Café + seating",
+    color: "#5b9bd5",
+    tint: "#e3eefa",
+  },
+  {
+    id: "parking",
+    label: "Parking",
+    description: "Free on-site parking, just steps from the clubhouse entrance.",
+    stat: "Free, on-site",
+    color: "#f2cb00",
+    tint: "#fdf6cc",
+  },
+];
+
 export const HERO_IMAGE =
   "https://images.unsplash.com/photo-1542144582-1ba00456b5e3?auto=format&fit=crop&w=2000&q=75";
 

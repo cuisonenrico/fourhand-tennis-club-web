@@ -1,6 +1,7 @@
 import { Hero } from "@/components/landing/hero";
 import { CourtShowcase } from "@/components/landing/court-showcase";
 import { Amenities } from "@/components/landing/amenities";
+import { FacilityMap } from "@/components/landing/facility-map";
 import { EventsTeaser } from "@/components/landing/events-teaser";
 import { AboutSnapshot } from "@/components/landing/about-snapshot";
 import { ContactSection } from "@/components/landing/contact-section";
@@ -11,6 +12,7 @@ export default function LandingPage() {
       <Hero />
       <CourtShowcase />
       <Amenities />
+      <FacilityMap />
       <EventsTeaser />
       <AboutSnapshot />
       <ContactSection />
