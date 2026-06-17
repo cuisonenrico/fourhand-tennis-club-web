@@ -103,6 +103,13 @@ begin
    where court_id = p_court_id and starts_at < p_ends_at and ends_at > p_starts_at
    for update;
 
+  -- Lock affected confirmed booking rows so concurrent admin ops on the same bookings serialise.
+  perform 1 from bookings b
+   join slots s on s.id = b.slot_id
+   where b.court_id = p_court_id and b.status = 'confirmed'
+     and s.starts_at < p_ends_at and s.ends_at > p_starts_at
+   for update of b;
+
   return query
   with affected as (
     select b.id, b.booking_group_id, b.guest_name, b.guest_email, b.cancel_token,
@@ -243,7 +250,10 @@ begin
   if v_n_old = 0 then raise exception 'booking_not_found' using errcode = 'P0002'; end if;
   if v_n_old <> v_n_new then raise exception 'slot_count_mismatch' using errcode = 'P0001'; end if;
 
-  perform 1 from slots where id = any(p_new_slot_ids) order by id for update;
+  perform 1 from slots
+   where id = any(p_new_slot_ids)
+      or id in (select slot_id from bookings where booking_group_id = p_booking_group_id and status = 'confirmed')
+   order by id for update;
   if (select count(*) from slots where id = any(p_new_slot_ids)) <> v_n_new then
     raise exception 'slot_not_found' using errcode = 'P0002';
   end if;
