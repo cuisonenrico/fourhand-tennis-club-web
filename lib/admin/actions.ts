@@ -10,7 +10,7 @@ import { sendClosureNotice, sendBookingEmails } from "@/lib/email/send";
 import { cancelBookingAction } from "@/lib/booking/actions";
 import type { AdminReassignResult } from "@/lib/supabase/types";
 import type { CloseCourtRow, AdminCreateResult } from "@/lib/supabase/types";
-import { searchBookings, getFreeSlotsForCourtDay, type BookingFilters, type AdminBookingDetail } from "@/lib/admin/queries";
+import { searchBookings, getFreeSlotsForCourtDay, getReport, type BookingFilters, type AdminBookingDetail, type ReportResult } from "@/lib/admin/queries";
 import type { Slot } from "@/lib/supabase/types";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
@@ -338,6 +338,12 @@ export async function updateSettingsAction(input: unknown): Promise<ActionResult
   await recordAudit(supabase, { actorEmail: actor, action: "settings.update", targetType: "settings", detail: parsed.data });
   revalidatePath("/admin/settings");
   return { ok: true };
+}
+
+export async function getReportAction(startKey: string, endKey: string): Promise<ReportResult> {
+  await requireAdminEmail();
+  const supabase = createAdminClient();
+  return getReport(supabase, startKey, endKey);
 }
 
 export { getTemplates };

@@ -238,6 +238,118 @@ export async function getAdminDay(supabase: SupabaseClient, dateKey: string): Pr
   return { bookings, courtCount: count ?? 0 };
 }
 
+export interface ReportDay {
+  dateKey: string;
+  revenueCents: number;
+  booked: number;
+  bookable: number;
+}
+
+export interface ReportResult {
+  days: ReportDay[];
+  totalRevenueCents: number;
+}
+
+/**
+ * Per-day revenue + occupancy report for an inclusive Manila date range.
+ * Revenue = Σ confirmed booking price_cents for slots starting on that day.
+ * booked/bookable counts slots excluding status = 'closed'.
+ */
+export async function getReport(
+  supabase: SupabaseClient,
+  startKey: string,
+  endKey: string,
+): Promise<ReportResult> {
+  // Build the list of day keys in the range.
+  const dayKeys: string[] = [];
+  const start = new Date(`${startKey}T00:00:00+08:00`);
+  const end = new Date(`${endKey}T00:00:00+08:00`);
+  for (let d = new Date(start); d <= end; d = new Date(d.getTime() + 24 * 60 * 60 * 1000)) {
+    dayKeys.push(
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(d),
+    );
+  }
+
+  if (dayKeys.length === 0) return { days: [], totalRevenueCents: 0 };
+
+  const rangeStart = manilaDayRange(startKey).startIso;
+  const rangeEnd = manilaDayRange(endKey).endIso;
+
+  // Fetch confirmed bookings in range (for revenue).
+  const { data: bookingRows, error: bErr } = await supabase
+    .from("bookings")
+    .select("price_cents,slots!inner(starts_at)")
+    .eq("status", "confirmed")
+    .gte("slots.starts_at", rangeStart)
+    .lt("slots.starts_at", rangeEnd);
+  if (bErr) throw bErr;
+
+  type BookingRow = { price_cents: number; slots: { starts_at: string } | null };
+  const bookings = (bookingRows ?? []) as unknown as BookingRow[];
+
+  // Fetch all slots in range (for booked/bookable, excluding closed).
+  const { data: slotRows, error: sErr } = await supabase
+    .from("slots")
+    .select("starts_at,status")
+    .gte("starts_at", rangeStart)
+    .lt("starts_at", rangeEnd);
+  if (sErr) throw sErr;
+
+  type SlotRow = { starts_at: string; status: string };
+  const slots = (slotRows ?? []) as SlotRow[];
+
+  // Group by day key.
+  const revenueByDay = new Map<string, number>();
+  const bookedByDay = new Map<string, number>();
+  const bookableByDay = new Map<string, number>();
+
+  for (const dk of dayKeys) {
+    revenueByDay.set(dk, 0);
+    bookedByDay.set(dk, 0);
+    bookableByDay.set(dk, 0);
+  }
+
+  const toKey = (iso: string) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(iso));
+
+  for (const b of bookings) {
+    if (!b.slots) continue;
+    const dk = toKey(b.slots.starts_at);
+    revenueByDay.set(dk, (revenueByDay.get(dk) ?? 0) + b.price_cents);
+  }
+
+  for (const s of slots) {
+    const dk = toKey(s.starts_at);
+    if (s.status !== "closed") {
+      bookableByDay.set(dk, (bookableByDay.get(dk) ?? 0) + 1);
+    }
+    if (s.status === "booked") {
+      bookedByDay.set(dk, (bookedByDay.get(dk) ?? 0) + 1);
+    }
+  }
+
+  const days: ReportDay[] = dayKeys.map((dk) => ({
+    dateKey: dk,
+    revenueCents: revenueByDay.get(dk) ?? 0,
+    booked: bookedByDay.get(dk) ?? 0,
+    bookable: bookableByDay.get(dk) ?? 0,
+  }));
+
+  const totalRevenueCents = days.reduce((sum, d) => sum + d.revenueCents, 0);
+
+  return { days, totalRevenueCents };
+}
+
 /** Business settings singleton row. */
 export async function getBusinessSettings(supabase: SupabaseClient): Promise<BusinessSettings> {
   const { data, error } = await supabase.from("business_settings").select("*").eq("id", true).single();
