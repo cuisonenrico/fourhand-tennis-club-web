@@ -25,6 +25,11 @@ export const holdSlotsSchema = z.object({
   hold_key: z.string().min(8).max(64),
 });
 
+export const releaseHoldSchema = z.object({
+  slot_ids: slotIds,
+  hold_key: z.string().min(8).max(64),
+});
+
 export const confirmBookingSchema = guestSchema.extend({
   slot_id: z.string().uuid(),
   hold_key: z.string().min(8).max(64),

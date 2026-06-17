@@ -8,7 +8,19 @@ import {
   getSlotsForCourt,
   type CourtAvailability,
 } from "@/lib/booking/queries";
-import { holdSlotsAction, confirmBookingMultiAction, ensureSlotsAction } from "@/lib/booking/actions";
+import {
+  holdSlotsAction,
+  confirmBookingMultiAction,
+  ensureSlotsAction,
+  releaseHoldAction,
+} from "@/lib/booking/actions";
+import {
+  readPendingHold,
+  writePendingHold,
+  clearPendingHold,
+  isHoldLive,
+  type PendingHold,
+} from "@/lib/booking/pending-hold";
 import { resolvePriceCents } from "@/lib/pricing";
 import { formatPrice, formatDateLong } from "@/lib/utils";
 import type { PricingRule, Slot } from "@/lib/supabase/types";
@@ -57,6 +69,9 @@ export function CourtGrid({
   const [holding, setHolding] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [success, setSuccess] = useState<SuccessInfo | null>(null);
+  // A hold from a previous visit that the guest left mid-checkout. Drives the
+  // resume banner; only set while the hold is still live.
+  const [resumable, setResumable] = useState<PendingHold | null>(null);
 
   const dateRef = useRef(dateKey);
   const courtRef = useRef(selectedCourtId);
@@ -119,6 +134,21 @@ export function CourtGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // On load, surface a hold the guest left mid-checkout last visit. A lapsed
+  // hold is discarded silently — the slots have already freed themselves.
+  useEffect(() => {
+    const saved = readPendingHold();
+    if (saved && isHoldLive(saved)) setResumable(saved);
+    else if (saved) clearPendingHold();
+  }, []);
+
+  // Free the active hold immediately and forget it (deliberate abandon: Back,
+  // closing the panel, or the resume banner's Cancel).
+  const releaseActiveHold = useCallback((ids: string[], key: string | null) => {
+    if (key && ids.length > 0) void releaseHoldAction({ slot_ids: ids, hold_key: key });
+    clearPendingHold();
+  }, []);
+
   function openCourt(courtId: string) {
     setSelectedCourtId(courtId);
     setPhase("slots");
@@ -129,9 +159,13 @@ export function CourtGrid({
   }
 
   function closePanel() {
+    // Closing the panel mid-checkout abandons the hold — free it now.
+    if (phase === "confirm") releaseActiveHold(selectedSlots.map((s) => s.id), holdKey);
     setSelectedCourtId(null);
     setPhase("slots");
     setSelectedSlots([]);
+    setHoldKey(null);
+    setIdemKey(null);
     setPanelError(null);
     setSuccess(null);
   }
@@ -166,9 +200,23 @@ export function CourtGrid({
       if (selectedCourtId) await loadSlots(selectedCourtId, dateKey);
       return;
     }
+    const idem = crypto.randomUUID();
     setHoldKey(key);
-    setIdemKey(crypto.randomUUID());
+    setIdemKey(idem);
     setPhase("confirm");
+
+    // Mirror the live hold so an abrupt exit can be resumed (or cancelled) later.
+    if (selectedCourt) {
+      writePendingHold({
+        holdKey: key,
+        idemKey: idem,
+        expiresAt: result.expiresAt,
+        courtId: selectedCourt.id,
+        courtName: selectedCourt.name,
+        dateKey,
+        slots: selectedSlots,
+      });
+    }
   }
 
   async function confirm(details: GuestDetails) {
@@ -185,6 +233,7 @@ export function CourtGrid({
     setSubmitting(false);
 
     if (result.status === "confirmed") {
+      clearPendingHold();
       setSuccess({
         courtName: selectedCourt.name,
         sessions: ordered.map((s) => ({ startsAt: s.starts_at, endsAt: s.ends_at })),
@@ -194,6 +243,7 @@ export function CourtGrid({
       void refreshAvailability(dateKey);
       void loadSlots(selectedCourt.id, dateKey);
     } else if (result.status === "slot_taken") {
+      clearPendingHold();
       setPanelError("One of those times was just taken. Please choose again.");
       setPhase("slots");
       setSelectedSlots([]);
@@ -203,10 +253,50 @@ export function CourtGrid({
     }
   }
 
+  // Confirm → slots: changing the selection abandons the current hold.
+  function backToSlots() {
+    releaseActiveHold(selectedSlots.map((s) => s.id), holdKey);
+    setHoldKey(null);
+    setIdemKey(null);
+    setPhase("slots");
+  }
+
+  // Resume banner → jump straight back into the confirm step for the saved hold.
+  function resumeHold(hold: PendingHold) {
+    setResumable(null);
+    setDateKey(hold.dateKey);
+    setSelectedCourtId(hold.courtId);
+    setSelectedSlots(hold.slots);
+    setHoldKey(hold.holdKey);
+    setIdemKey(hold.idemKey);
+    setPanelError(null);
+    setSuccess(null);
+    setPhase("confirm");
+    // Load the board behind the form so a later Back lands on a populated grid.
+    void loadSlots(hold.courtId, hold.dateKey);
+  }
+
+  // Resume banner → drop the hold and free the slots.
+  function cancelResumable(hold: PendingHold) {
+    setResumable(null);
+    releaseActiveHold(hold.slots.map((s) => s.id), hold.holdKey);
+    void refreshAvailability(dateKey);
+    if (selectedCourtId) void loadSlots(selectedCourtId, dateKey);
+  }
+
   const orderedSelection = [...selectedSlots].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
 
   return (
     <>
+      {resumable && (
+        <ResumeBanner
+          hold={resumable}
+          totalLabel={formatPrice(resumable.slots.reduce((sum, s) => sum + priceOf(s), 0))}
+          onResume={() => resumeHold(resumable)}
+          onCancel={() => cancelResumable(resumable)}
+        />
+      )}
+
       <div className="mb-6">
         <DateControl dateKeys={dateKeys} value={dateKey} onChange={changeDate} maxDateKey={maxDateKey} />
       </div>
@@ -253,7 +343,7 @@ export function CourtGrid({
             slots={orderedSelection}
             totalPriceLabel={formatPrice(totalCents)}
             submitting={submitting}
-            onBack={() => setPhase("slots")}
+            onBack={backToSlots}
             onConfirm={confirm}
           />
         )}
@@ -268,6 +358,51 @@ export function CourtGrid({
         )}
       </AvailabilityPanel>
     </>
+  );
+}
+
+function ResumeBanner({
+  hold,
+  totalLabel,
+  onResume,
+  onCancel,
+}: {
+  hold: PendingHold;
+  totalLabel: string;
+  onResume: () => void;
+  onCancel: () => void;
+}) {
+  const count = hold.slots.length;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      className="mb-6 flex flex-col gap-3 rounded-card border border-green/30 bg-green/5 p-4 shadow-soft sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="text-sm">
+        <p className="font-semibold text-charcoal">You have a booking in progress</p>
+        <p className="text-charcoal/60">
+          {hold.courtName} · {count} hour{count === 1 ? "" : "s"} · {totalLabel} — held for a few more minutes.
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold text-charcoal/70 transition-colors hover:bg-surface"
+        >
+          Cancel hold
+        </button>
+        <button
+          type="button"
+          onClick={onResume}
+          className="inline-flex h-10 items-center justify-center rounded-xl bg-green px-5 text-sm font-semibold text-white shadow-soft transition-all hover:bg-green-600 hover:shadow-lift active:scale-[0.98]"
+        >
+          Resume
+        </button>
+      </div>
+    </motion.div>
   );
 }
 

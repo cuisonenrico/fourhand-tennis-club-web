@@ -1,7 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { confirmBookingMultiSchema, holdSlotsSchema } from "@/lib/validation";
+import { confirmBookingMultiSchema, holdSlotsSchema, releaseHoldSchema } from "@/lib/validation";
 import { sendBookingEmails, sendCancellationEmail } from "@/lib/email/send";
 import { ensureSlotsForDate } from "@/lib/booking/ensure-slots";
 import type { Court, Slot, ConfirmMultiResult } from "@/lib/supabase/types";
@@ -37,6 +37,22 @@ export async function holdSlotsAction(input: unknown): Promise<HoldResult> {
     return { ok: false, error: "unavailable" };
   }
   return { ok: true, expiresAt: data as string };
+}
+
+/**
+ * Release a still-active hold early when the guest cancels or abandons checkout.
+ * Best-effort: the timed expiry is the backstop, so failures never surface.
+ */
+export async function releaseHoldAction(input: unknown): Promise<void> {
+  const parsed = releaseHoldSchema.safeParse(input);
+  if (!parsed.success) return;
+
+  const supabase = createAdminClient();
+  const { error } = await supabase.rpc("release_hold", {
+    p_slot_ids: parsed.data.slot_ids,
+    p_hold_key: parsed.data.hold_key,
+  });
+  if (error) console.error("[releaseHoldAction] release_hold rpc error:", error);
 }
 
 /** Confirm a group of slots atomically, then queue confirmation + staff emails. */
