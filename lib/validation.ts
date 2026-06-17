@@ -105,6 +105,7 @@ export const settingsSchema = z.object({
   accent_hex: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   contact_email: z.string().email().nullable().optional(),
   contact_phone: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
   default_open_time: z.string().regex(/^\d{2}:\d{2}$/),
   default_close_time: z.string().regex(/^\d{2}:\d{2}$/),
   cancellation_window_hours: z.number().int().min(0).max(168),

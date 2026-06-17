@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import { ContactSection } from "@/components/landing/contact-section";
 import { ContactForm } from "@/components/contact/contact-form";
+import { getPublicSettings } from "@/lib/settings/public";
 
 export const metadata: Metadata = {
   title: "Contact",
   description: "Visit, call, or message Fourhand Tennis Club in Manila.",
 };
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  const settings = await getPublicSettings();
   return (
     <div className="pt-8">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -17,7 +19,7 @@ export default function ContactPage() {
         </p>
       </div>
 
-      <ContactSection />
+      <ContactSection settings={settings} />
 
       <div className="mx-auto max-w-6xl px-4 pb-8 sm:px-6">
         <div className="mx-auto max-w-xl">

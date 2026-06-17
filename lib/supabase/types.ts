@@ -97,6 +97,7 @@ export interface BusinessSettings {
   accent_hex: string;
   contact_email: string | null;
   contact_phone: string | null;
+  address: string | null;
   default_open_time: string;
   default_close_time: string;
   cancellation_window_hours: number;

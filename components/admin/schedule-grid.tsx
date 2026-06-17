@@ -8,6 +8,8 @@ import {
   type ScheduleCell,
 } from "@/lib/admin/queries";
 import { AdminDateControl } from "./admin-date-control";
+import { BookedBlock } from "./booked-block";
+import { buildRowSegments } from "@/lib/admin/schedule";
 import { todayKey, formatTime, formatDateLong } from "@/lib/utils";
 
 // Derive an ordered list of hour labels from a flat list of cells across all rows.
@@ -39,18 +41,8 @@ function cellColour(status: ScheduleCell["status"]): string {
   }
 }
 
+/** Content for a non-booked cell (booked cells render via <BookedBlock />). */
 function CellContent({ cell }: { cell: ScheduleCell }) {
-  if (cell.status === "booked") {
-    const initial = cell.guestName ? cell.guestName.charAt(0).toUpperCase() : "?";
-    return (
-      <span
-        title={cell.guestName ?? undefined}
-        className="flex h-full w-full items-center justify-center text-xs font-bold"
-      >
-        {initial}
-      </span>
-    );
-  }
   if (cell.status === "closed") {
     return (
       <span
@@ -62,6 +54,30 @@ function CellContent({ cell }: { cell: ScheduleCell }) {
     );
   }
   return null;
+}
+
+/** Pulsing placeholder shown while the schedule loads or the date changes. */
+function ScheduleGridSkeleton() {
+  const cols = Array.from({ length: 10 });
+  const rows = Array.from({ length: 6 });
+  return (
+    <div className="space-y-1 p-3" aria-hidden>
+      <div className="flex gap-1">
+        <div className="h-7 w-20 shrink-0" />
+        {cols.map((_, c) => (
+          <div key={c} className="h-7 w-12 animate-pulse rounded-sm bg-surface" />
+        ))}
+      </div>
+      {rows.map((_, r) => (
+        <div key={r} className="flex gap-1">
+          <div className="h-7 w-20 shrink-0 animate-pulse rounded-sm bg-surface" />
+          {cols.map((_, c) => (
+            <div key={c} className="h-7 w-12 animate-pulse rounded-sm bg-surface" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function ScheduleGrid() {
@@ -136,9 +152,7 @@ export function ScheduleGrid() {
 
       {/* Grid */}
       <div className="rounded-card border border-surface bg-white shadow-soft overflow-x-auto">
-        {loading && (
-          <div className="py-10 text-center text-sm text-charcoal/50">Loading schedule…</div>
-        )}
+        {loading && <ScheduleGridSkeleton />}
         {error && !loading && (
           <div className="py-10 text-center text-sm text-red-500">{error}</div>
         )}
@@ -169,6 +183,7 @@ export function ScheduleGrid() {
               {data.rows.map((row, ri) => {
                 // Build a map for O(1) lookup: startsAt → cell
                 const cellMap = new Map(row.cells.map((c) => [c.startsAt, c]));
+                const segments = buildRowSegments(hours, cellMap);
                 return (
                   <tr
                     key={row.court.id}
@@ -177,22 +192,37 @@ export function ScheduleGrid() {
                     <td className="sticky left-0 z-10 bg-inherit px-3 py-1 font-medium text-charcoal border-r border-surface whitespace-nowrap">
                       {row.court.name}
                     </td>
-                    {hours.map((h) => {
-                      const cell = cellMap.get(h);
-                      return (
-                        <td
-                          key={h}
-                          className="px-0.5 py-0.5 border-l border-surface"
-                        >
-                          {cell ? (
-                            <div
-                              className={`h-7 w-12 rounded-sm ${cellColour(cell.status)}`}
-                            >
-                              <CellContent cell={cell} />
+                    {segments.map((seg, si) => {
+                      if (seg.kind === "booked") {
+                        return (
+                          <td
+                            key={si}
+                            colSpan={seg.span}
+                            className="px-0.5 py-0.5 border-l border-surface"
+                          >
+                            <BookedBlock
+                              guestName={seg.guestName}
+                              guestEmail={seg.guestEmail}
+                              guestPhone={seg.guestPhone}
+                              startsAt={seg.startsAt}
+                              endsAt={seg.endsAt}
+                              span={seg.span}
+                            />
+                          </td>
+                        );
+                      }
+                      if (seg.kind === "single") {
+                        return (
+                          <td key={si} className="px-0.5 py-0.5 border-l border-surface">
+                            <div className={`h-7 w-12 rounded-sm ${cellColour(seg.cell.status)}`}>
+                              <CellContent cell={seg.cell} />
                             </div>
-                          ) : (
-                            <div className="h-7 w-12" />
-                          )}
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={si} className="px-0.5 py-0.5 border-l border-surface">
+                          <div className="h-7 w-12" />
                         </td>
                       );
                     })}

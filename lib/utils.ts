@@ -54,6 +54,19 @@ export function formatTimeRange(startIso: string, endIso: string): string {
   return `${formatTime(startIso)} – ${formatTime(endIso)}`;
 }
 
+/** "06:00" / "06:00:00" → "6:00 AM" (clock-only, no date/timezone). */
+export function formatClockTime(hhmm: string): string {
+  const [h, m] = hhmm.slice(0, 5).split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+/** "Daily · 6:00 AM – 10:00 PM" from two "HH:MM[:SS]" opening times. */
+export function formatHours(openTime: string, closeTime: string): string {
+  return `Daily · ${formatClockTime(openTime)} – ${formatClockTime(closeTime)}`;
+}
+
 /**
  * UTC ISO bounds for a Manila calendar day (key = "YYYY-MM-DD").
  * Manila is a fixed UTC+8 with no DST, so the day is [key 00:00, +24h).

@@ -16,14 +16,14 @@ export default async function CourtsPage() {
   return (
     <div className="space-y-10">
       <section>
+        <ScheduleGrid />
+      </section>
+      <section>
         <h1 className="mb-4 text-2xl font-bold text-charcoal">Courts</h1>
         <CourtEditor courts={courts} />
       </section>
       <section>
         <ClosurePanel courts={courts} closures={closures} />
-      </section>
-      <section>
-        <ScheduleGrid />
       </section>
     </div>
   );

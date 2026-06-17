@@ -3,7 +3,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Court, Closure, Slot, SlotStatus, EmailTemplate, BusinessSettings } from "@/lib/supabase/types";
 import { getSlotsForCourt } from "@/lib/booking/queries";
 
-export interface ScheduleCell { startsAt: string; status: SlotStatus; guestName: string | null }
+export interface ScheduleCell {
+  startsAt: string;
+  endsAt: string;
+  status: SlotStatus;
+  guestName: string | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  bookingGroupId: string | null;
+}
 export interface ScheduleRow { court: Court; cells: ScheduleCell[] }
 export interface ScheduleGridData { rows: ScheduleRow[] }
 
@@ -12,15 +20,37 @@ export async function getScheduleGrid(supabase: SupabaseClient, dateKey: string)
   const courts = await getCourtsAdmin(supabase);
   const { data: slots, error } = await supabase
     .from("slots")
-    .select("court_id,starts_at,status, bookings!bookings_slot_id_fkey(guest_name,status)")
+    .select(
+      "court_id,starts_at,ends_at,status, bookings!bookings_slot_id_fkey(guest_name,guest_email,guest_phone,booking_group_id,status)",
+    )
     .gte("starts_at", startIso).lt("starts_at", endIso).order("starts_at");
   if (error) throw error;
 
-  type Row = { court_id: string; starts_at: string; status: SlotStatus; bookings: { guest_name: string; status: string }[] };
+  type Row = {
+    court_id: string;
+    starts_at: string;
+    ends_at: string;
+    status: SlotStatus;
+    bookings: {
+      guest_name: string;
+      guest_email: string;
+      guest_phone: string;
+      booking_group_id: string | null;
+      status: string;
+    }[];
+  };
   const byCourt = new Map<string, ScheduleCell[]>();
   for (const s of (slots ?? []) as unknown as Row[]) {
     const confirmed = s.bookings?.find((b) => b.status === "confirmed");
-    const cell: ScheduleCell = { startsAt: s.starts_at, status: s.status, guestName: confirmed?.guest_name ?? null };
+    const cell: ScheduleCell = {
+      startsAt: s.starts_at,
+      endsAt: s.ends_at,
+      status: s.status,
+      guestName: confirmed?.guest_name ?? null,
+      guestEmail: confirmed?.guest_email ?? null,
+      guestPhone: confirmed?.guest_phone ?? null,
+      bookingGroupId: confirmed?.booking_group_id ?? null,
+    };
     byCourt.set(s.court_id, [...(byCourt.get(s.court_id) ?? []), cell]);
   }
   return { rows: courts.map((court) => ({ court, cells: byCourt.get(court.id) ?? [] })) };

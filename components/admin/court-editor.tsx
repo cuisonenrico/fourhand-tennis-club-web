@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { upsertCourtAction } from "@/lib/admin/actions";
+import { upsertCourtAction, deleteCourtAction } from "@/lib/admin/actions";
 import type { Court } from "@/lib/supabase/types";
 import type { CourtInput } from "@/lib/validation";
 
@@ -176,6 +176,7 @@ function CourtFormFields({ value, onChange }: CourtFormProps) {
 function CourtRow({ court }: { court: Court }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [form, setForm] = useState<CourtInput>(() => courtToForm(court));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -197,6 +198,19 @@ function CourtRow({ court }: { court: Court }) {
     setForm(courtToForm(court));
     setEditing(false);
     setError(null);
+  }
+
+  function handleDelete() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteCourtAction(court.id);
+      if (!result.ok) {
+        // Keep the dialog open so the reason (e.g. court has bookings) is visible.
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
   }
 
   return (
@@ -221,11 +235,50 @@ function CourtRow({ court }: { court: Court }) {
           </p>
         </div>
         {!editing && (
-          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-            Edit
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              onClick={() => { setConfirmingDelete(true); setError(null); }}
+            >
+              Delete
+            </Button>
+          </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      {confirmingDelete && (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
+          <p className="text-sm font-medium text-charcoal">
+            Delete <span className="font-semibold">{court.name}</span>? This also removes its
+            empty slots and any closures. This cannot be undone.
+          </p>
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+          <div className="mt-3 flex gap-2">
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleDelete}
+              disabled={pending}
+            >
+              {pending ? "Deleting…" : "Delete court"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Inline edit form */}
       {editing && (

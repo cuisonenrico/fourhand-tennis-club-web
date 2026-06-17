@@ -298,6 +298,37 @@ export async function upsertCourtAction(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
+export async function deleteCourtAction(id: string): Promise<ActionResult> {
+  const actor = await requireAdminEmail();
+  const supabase = createAdminClient();
+
+  // Preserve history: refuse to delete a court that any booking references
+  // (bookings.court_id has no cascade). Slots + closures cascade on delete.
+  const { count, error: countErr } = await supabase
+    .from("bookings")
+    .select("id", { count: "exact", head: true })
+    .eq("court_id", id);
+  if (countErr) return { ok: false, error: countErr.message };
+  if ((count ?? 0) > 0) {
+    return {
+      ok: false,
+      error: "This court has bookings. Set it to Maintenance instead of deleting.",
+    };
+  }
+
+  const { error } = await supabase.from("courts").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  await recordAudit(supabase, {
+    actorEmail: actor,
+    action: "court.delete",
+    targetType: "court",
+    targetId: id,
+  });
+  revalidatePath("/admin/courts");
+  return { ok: true };
+}
+
 export async function upsertTemplateAction(input: unknown): Promise<ActionResult> {
   const parsed = templateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid template" };

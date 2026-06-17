@@ -18,6 +18,7 @@ function settingsToForm(s: BusinessSettings): SettingsInput {
     accent_hex: s.accent_hex,
     contact_email: s.contact_email ?? null,
     contact_phone: s.contact_phone ?? null,
+    address: s.address ?? null,
     // DB may store "HH:MM:SS" — trim to "HH:MM"
     default_open_time: s.default_open_time.slice(0, 5),
     default_close_time: s.default_close_time.slice(0, 5),
@@ -134,6 +135,19 @@ export function SettingsForm({ settings }: { settings: BusinessSettings }) {
             value={form.contact_phone ?? ""}
             onChange={(e) => set("contact_phone", e.target.value || null)}
             placeholder="+63 912 345 6789"
+          />
+        </div>
+
+        {/* Address */}
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-sm font-medium text-charcoal">
+            Address <span className="text-charcoal/50">(shown on the public site)</span>
+          </label>
+          <input
+            className={inputClass}
+            value={form.address ?? ""}
+            onChange={(e) => set("address", e.target.value || null)}
+            placeholder="123 Baseline Ave, Manila"
           />
         </div>
 

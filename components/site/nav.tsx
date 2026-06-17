@@ -14,16 +14,20 @@ const LINKS = [
   { href: "/contact", label: "Contact" },
 ];
 
-export function Nav() {
+export function Nav({ clubName = "Fourhand Tennis Club" }: { clubName?: string }) {
   const [open, setOpen] = useState(false);
+  // First word of the club name for the cramped mobile header.
+  const shortName = clubName.split(" ")[0];
 
   return (
     <header className="sticky top-0 z-40 border-b border-surface/80 bg-white/85 backdrop-blur-md">
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-charcoal">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-green text-white">F</span>
-          <span className="hidden sm:inline">Fourhand Tennis Club</span>
-          <span className="sm:hidden">Fourhand</span>
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-green text-white">
+            {clubName.charAt(0).toUpperCase()}
+          </span>
+          <span className="hidden sm:inline">{clubName}</span>
+          <span className="sm:hidden">{shortName}</span>
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
