@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
-import { getAdminDay, type AdminDay } from "@/lib/admin/queries";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getAdminDashboard, type AdminDashboardData } from "@/lib/admin/queries";
 import { todayKey } from "@/lib/utils";
 import { AdminDashboard } from "@/components/admin/admin-dashboard";
 
@@ -11,10 +11,16 @@ export const metadata: Metadata = {
 
 export default async function AdminOverviewPage() {
   const dateKey = todayKey();
-  let initialDay: AdminDay = { bookings: [], courtCount: 0 };
+  let initialDay: AdminDashboardData = {
+    bookings: [],
+    courtCount: 0,
+    revenueCents: 0,
+    occupiedSlots: 0,
+    bookableSlots: 0,
+    nextBooking: null,
+  };
   try {
-    const supabase = await createClient();
-    initialDay = await getAdminDay(supabase, dateKey);
+    initialDay = await getAdminDashboard(createAdminClient(), dateKey);
   } catch (err) {
     console.error("[admin] initial load failed:", err);
   }

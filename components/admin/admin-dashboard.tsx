@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { getAdminDay, type AdminDay } from "@/lib/admin/queries";
+import { getAdminDashboard, type AdminDashboardData } from "@/lib/admin/queries";
 import { formatDateLong } from "@/lib/utils";
 import { SummaryStrip } from "./summary-strip";
 import { BookingList } from "./booking-list";
@@ -13,12 +13,12 @@ export function AdminDashboard({
   initialDay,
   initialDateKey,
 }: {
-  initialDay: AdminDay;
+  initialDay: AdminDashboardData;
   initialDateKey: string;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [dateKey, setDateKey] = useState(initialDateKey);
-  const [day, setDay] = useState<AdminDay>(initialDay);
+  const [day, setDay] = useState<AdminDashboardData>(initialDay);
   const [live, setLive] = useState(false);
   const dateRef = useRef(dateKey);
   dateRef.current = dateKey;
@@ -26,7 +26,7 @@ export function AdminDashboard({
   const refresh = useCallback(
     async (dk: string) => {
       try {
-        setDay(await getAdminDay(supabase, dk));
+        setDay(await getAdminDashboard(supabase, dk));
       } catch (err) {
         console.error("[admin] refresh failed:", err);
       }
@@ -67,7 +67,7 @@ export function AdminDashboard({
         </div>
       </div>
 
-      <SummaryStrip bookings={day.bookings} courtCount={day.courtCount} />
+      <SummaryStrip data={day} />
       <BookingList bookings={day.bookings} />
     </div>
   );

@@ -1,6 +1,49 @@
 import { manilaDayRange } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export function summariseRevenue(bookings: AdminBooking[]): number {
+  return bookings
+    .filter((b) => b.status === "confirmed")
+    .reduce((sum, b) => sum + b.priceCents, 0);
+}
+
+export interface AdminDashboardData extends AdminDay {
+  revenueCents: number;
+  occupiedSlots: number;
+  bookableSlots: number;
+  nextBooking: AdminBooking | null;
+}
+
+export async function getAdminDashboard(
+  supabase: SupabaseClient,
+  dateKey: string,
+): Promise<AdminDashboardData> {
+  const { startIso, endIso } = manilaDayRange(dateKey);
+  const day = await getAdminDay(supabase, dateKey);
+
+  // Slot occupancy for the day, excluding closures from the denominator.
+  const { data: slots } = await supabase
+    .from("slots")
+    .select("status")
+    .gte("starts_at", startIso)
+    .lt("starts_at", endIso);
+  const rows = (slots ?? []) as { status: string }[];
+  const bookableSlots = rows.filter((s) => s.status !== "closed").length;
+  const occupiedSlots = rows.filter((s) => s.status === "booked").length;
+
+  const nowIso = new Date().toISOString();
+  const nextBooking =
+    day.bookings.find((b) => b.startsAt >= nowIso) ?? null;
+
+  return {
+    ...day,
+    revenueCents: summariseRevenue(day.bookings),
+    occupiedSlots,
+    bookableSlots,
+    nextBooking,
+  };
+}
+
 export interface AdminBooking {
   id: string;
   guestName: string;
