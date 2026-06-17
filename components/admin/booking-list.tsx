@@ -1,7 +1,7 @@
 import { formatPrice, formatTimeRange } from "@/lib/utils";
-import type { AdminBooking } from "@/lib/admin/queries";
+import { groupBookings, type AdminBooking } from "@/lib/admin/queries";
 
-/** Read-only list of the day's bookings (Plan §10.1). */
+/** Read-only list of the day's bookings, one row per booking group (Plan §10.1). */
 export function BookingList({ bookings }: { bookings: AdminBooking[] }) {
   if (bookings.length === 0) {
     return (
@@ -11,6 +11,8 @@ export function BookingList({ bookings }: { bookings: AdminBooking[] }) {
       </div>
     );
   }
+
+  const groups = groupBookings(bookings);
 
   return (
     <div className="overflow-hidden rounded-card border border-surface bg-white shadow-soft">
@@ -25,12 +27,18 @@ export function BookingList({ bookings }: { bookings: AdminBooking[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-surface">
-          {bookings.map((b) => (
-            <tr key={b.id} className="hover:bg-surface/30">
-              <td className="px-4 py-3 font-medium text-charcoal">{formatTimeRange(b.startsAt, b.endsAt)}</td>
-              <td className="px-4 py-3 text-charcoal/80">{b.courtName}</td>
-              <td className="px-4 py-3 text-charcoal/80">{b.guestName}</td>
-              <td className="px-4 py-3 text-charcoal/80">{formatPrice(b.priceCents)}</td>
+          {groups.map((g) => (
+            <tr key={g.key} className="hover:bg-surface/30">
+              <td className="px-4 py-3 font-medium text-charcoal">
+                {g.items.map((b) => (
+                  <span key={b.id} className="block">
+                    {formatTimeRange(b.startsAt, b.endsAt)}
+                  </span>
+                ))}
+              </td>
+              <td className="px-4 py-3 text-charcoal/80">{g.courtNames.join(", ")}</td>
+              <td className="px-4 py-3 text-charcoal/80">{g.lead.guestName}</td>
+              <td className="px-4 py-3 text-charcoal/80">{formatPrice(g.totalPriceCents)}</td>
               <td className="px-4 py-3">
                 <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-600">
                   Confirmed

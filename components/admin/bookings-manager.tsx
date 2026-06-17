@@ -11,7 +11,7 @@ import {
   adminReassignAction,
 } from "@/lib/admin/actions";
 import { formatTimeRange, formatPrice } from "@/lib/utils";
-import type { AdminBookingDetail, BookingFilters } from "@/lib/admin/queries";
+import { groupBookings, type AdminBookingDetail, type BookingFilters } from "@/lib/admin/queries";
 import type { Court, Slot } from "@/lib/supabase/types";
 
 // ---------------------------------------------------------------------------
@@ -812,49 +812,56 @@ export function BookingsManager({ courts, initialBookings, initialDateKey }: Pro
               </tr>
             </thead>
             <tbody className="divide-y divide-surface">
-              {bookings.map((b) => (
-                <tr key={b.id} className="hover:bg-surface/30">
-                  <td className="px-4 py-3 font-medium text-charcoal">
-                    {formatTimeRange(b.startsAt, b.endsAt)}
-                  </td>
-                  <td className="px-4 py-3 text-charcoal/80">{b.courtName}</td>
-                  <td className="px-4 py-3 text-charcoal/80">{b.guestName}</td>
-                  <td className="px-4 py-3 text-charcoal/80">
-                    <span className="block">{b.guestEmail}</span>
-                    {b.guestPhone && (
-                      <span className="block text-xs text-charcoal/50">{b.guestPhone}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-charcoal/80">{formatPrice(b.priceCents)}</td>
-                  <td className="px-4 py-3">
-                    <SourceBadge source={b.source} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={b.status} />
-                  </td>
-                  {/* Per-row actions */}
-                  <td className="px-4 py-3">
-                    {b.status === "confirmed" && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => { setReassignTarget(b); }}
-                          className="rounded-lg border border-surface px-2.5 py-1 text-xs font-medium text-charcoal hover:bg-surface"
-                        >
-                          Reassign
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setCancelTarget(b); setCancelError(null); }}
-                          className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-50"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {groupBookings(bookings).map((g) => {
+                const b = g.lead;
+                return (
+                  <tr key={g.key} className="hover:bg-surface/30">
+                    <td className="px-4 py-3 font-medium text-charcoal">
+                      {g.items.map((item) => (
+                        <span key={item.id} className="block">
+                          {formatTimeRange(item.startsAt, item.endsAt)}
+                        </span>
+                      ))}
+                    </td>
+                    <td className="px-4 py-3 text-charcoal/80">{g.courtNames.join(", ")}</td>
+                    <td className="px-4 py-3 text-charcoal/80">{b.guestName}</td>
+                    <td className="px-4 py-3 text-charcoal/80">
+                      <span className="block">{b.guestEmail}</span>
+                      {b.guestPhone && (
+                        <span className="block text-xs text-charcoal/50">{b.guestPhone}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-charcoal/80">{formatPrice(g.totalPriceCents)}</td>
+                    <td className="px-4 py-3">
+                      <SourceBadge source={b.source} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={b.status} />
+                    </td>
+                    {/* Group-level actions (cancel + reassign operate on the whole group) */}
+                    <td className="px-4 py-3">
+                      {b.status === "confirmed" && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setReassignTarget(b); }}
+                            className="rounded-lg border border-surface px-2.5 py-1 text-xs font-medium text-charcoal hover:bg-surface"
+                          >
+                            Reassign
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setCancelTarget(b); setCancelError(null); }}
+                            className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

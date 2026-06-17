@@ -101,6 +101,50 @@ export interface AdminBooking {
   courtName: string;
   startsAt: string;
   endsAt: string;
+  bookingGroupId: string | null;
+}
+
+/** One entry per booking group (a guest's multi-slot booking shown as a unit). */
+export interface BookingGroup<T extends AdminBooking = AdminBooking> {
+  /** Stable React key: the shared group id, or the booking id when ungrouped. */
+  key: string;
+  /** Member bookings, sorted by start time ascending. */
+  items: T[];
+  /** Representative row (earliest slot) for guest/source/status/action fields. */
+  lead: T;
+  /** Σ of member price_cents. */
+  totalPriceCents: number;
+  /** Distinct court names across the group (one in practice). */
+  courtNames: string[];
+}
+
+/**
+ * Collapse per-slot booking rows into one entry per booking_group_id, preserving
+ * the order groups first appear. Rows without a group id stand alone (keyed by id).
+ * Reassign updates rows in place and cancel flips the whole group, so a group is
+ * always uniformly confirmed/cancelled — summing price_cents never double-counts.
+ */
+export function groupBookings<T extends AdminBooking>(bookings: T[]): BookingGroup<T>[] {
+  const order: string[] = [];
+  const byKey = new Map<string, T[]>();
+  for (const b of bookings) {
+    const key = b.bookingGroupId ?? b.id;
+    if (!byKey.has(key)) {
+      byKey.set(key, []);
+      order.push(key);
+    }
+    byKey.get(key)!.push(b);
+  }
+  return order.map((key) => {
+    const items = [...byKey.get(key)!].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+    return {
+      key,
+      items,
+      lead: items[0],
+      totalPriceCents: items.reduce((sum, b) => sum + b.priceCents, 0),
+      courtNames: [...new Set(items.map((b) => b.courtName))],
+    };
+  });
 }
 
 export interface BookingFilters {
@@ -113,7 +157,6 @@ export interface BookingFilters {
 export interface AdminBookingDetail extends AdminBooking {
   guestEmail: string;
   guestPhone: string;
-  bookingGroupId: string | null;
   cancelToken: string;
   source: string;
   courtId: string;
@@ -199,6 +242,7 @@ interface BookingRow {
   guest_name: string;
   status: "confirmed" | "cancelled";
   price_cents: number;
+  booking_group_id: string | null;
   slots: { starts_at: string; ends_at: string } | null;
   courts: { name: string } | null;
 }
@@ -213,7 +257,7 @@ export async function getAdminDay(supabase: SupabaseClient, dateKey: string): Pr
   const [{ data: bookingRows, error }, { count }] = await Promise.all([
     supabase
       .from("bookings")
-      .select("id,guest_name,status,price_cents,slots!bookings_slot_id_fkey!inner(starts_at,ends_at),courts!inner(name)")
+      .select("id,guest_name,status,price_cents,booking_group_id,slots!bookings_slot_id_fkey!inner(starts_at,ends_at),courts!inner(name)")
       .eq("status", "confirmed")
       .gte("slots.starts_at", startIso)
       .lt("slots.starts_at", endIso)
@@ -233,6 +277,7 @@ export async function getAdminDay(supabase: SupabaseClient, dateKey: string): Pr
       courtName: r.courts!.name,
       startsAt: r.slots!.starts_at,
       endsAt: r.slots!.ends_at,
+      bookingGroupId: r.booking_group_id,
     }));
 
   return { bookings, courtCount: count ?? 0 };
