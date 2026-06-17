@@ -140,7 +140,7 @@ export async function cancelBookingAction(cancelToken: string): Promise<CancelRe
   try {
     const { data: bookings } = await supabase
       .from("bookings")
-      .select("guest_name,court_id,slots!inner(starts_at,ends_at)")
+      .select("guest_name,court_id,slots!bookings_slot_id_fkey!inner(starts_at,ends_at)")
       .eq("cancel_token", cancelToken)
       .order("starts_at", { foreignTable: "slots" });
 

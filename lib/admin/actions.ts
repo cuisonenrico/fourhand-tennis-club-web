@@ -231,7 +231,7 @@ export async function adminReassignAction(input: unknown): Promise<ActionResult>
   try {
     const { data: rows } = await supabase
       .from("bookings")
-      .select("guest_name,guest_email,cancel_token,court_id,slots!inner(starts_at,ends_at)")
+      .select("guest_name,guest_email,cancel_token,court_id,slots!bookings_slot_id_fkey!inner(starts_at,ends_at)")
       .eq("booking_group_id", parsed.data.booking_group_id)
       .eq("status", "confirmed")
       .order("starts_at", { foreignTable: "slots" });

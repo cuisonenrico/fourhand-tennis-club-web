@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     const { data: rows } = await supabase
       .from("bookings")
       .select(
-        "id,guest_name,guest_email,cancel_token,court_id,reminded_at,slots!inner(starts_at,ends_at),courts!inner(name)",
+        "id,guest_name,guest_email,cancel_token,court_id,reminded_at,slots!bookings_slot_id_fkey!inner(starts_at,ends_at),courts!inner(name)",
       )
       .eq("status", "confirmed")
       .is("reminded_at", null)

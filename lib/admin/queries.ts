@@ -12,7 +12,7 @@ export async function getScheduleGrid(supabase: SupabaseClient, dateKey: string)
   const courts = await getCourtsAdmin(supabase);
   const { data: slots, error } = await supabase
     .from("slots")
-    .select("court_id,starts_at,status, bookings!left(guest_name,status)")
+    .select("court_id,starts_at,status, bookings!bookings_slot_id_fkey(guest_name,status)")
     .gte("starts_at", startIso).lt("starts_at", endIso).order("starts_at");
   if (error) throw error;
 
@@ -127,7 +127,7 @@ export async function searchBookings(
   let query = supabase
     .from("bookings")
     .select(
-      "id,guest_name,guest_email,guest_phone,status,price_cents,source,court_id,slot_id,booking_group_id,cancel_token,slots!inner(starts_at,ends_at),courts!inner(name)",
+      "id,guest_name,guest_email,guest_phone,status,price_cents,source,court_id,slot_id,booking_group_id,cancel_token,slots!bookings_slot_id_fkey!inner(starts_at,ends_at),courts!inner(name)",
     )
     .order("starts_at", { foreignTable: "slots", ascending: false })
     .limit(200);
@@ -213,7 +213,7 @@ export async function getAdminDay(supabase: SupabaseClient, dateKey: string): Pr
   const [{ data: bookingRows, error }, { count }] = await Promise.all([
     supabase
       .from("bookings")
-      .select("id,guest_name,status,price_cents,slots!inner(starts_at,ends_at),courts!inner(name)")
+      .select("id,guest_name,status,price_cents,slots!bookings_slot_id_fkey!inner(starts_at,ends_at),courts!inner(name)")
       .eq("status", "confirmed")
       .gte("slots.starts_at", startIso)
       .lt("slots.starts_at", endIso)
@@ -283,7 +283,7 @@ export async function getReport(
   // Fetch confirmed bookings in range (for revenue).
   const { data: bookingRows, error: bErr } = await supabase
     .from("bookings")
-    .select("price_cents,slots!inner(starts_at)")
+    .select("price_cents,slots!bookings_slot_id_fkey!inner(starts_at)")
     .eq("status", "confirmed")
     .gte("slots.starts_at", rangeStart)
     .lt("slots.starts_at", rangeEnd);
