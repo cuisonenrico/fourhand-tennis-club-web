@@ -9,6 +9,8 @@ import Cancellation from "@/emails/cancellation";
 import ContactAck from "@/emails/contact-ack";
 import ClosureNotice from "@/emails/closure-notice";
 import BookingReassigned from "@/emails/booking-reassigned";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveTemplate } from "@/lib/email/templates";
 
 interface Session {
   startsAt: string;
@@ -55,10 +57,15 @@ export async function sendBookingEmails(ctx: BookingEmailContext): Promise<void>
     sessions: ctx.sessions,
   });
 
+  const tpl = await resolveTemplate(createAdminClient(), "booking_confirmation", {
+    subject: `Your court is booked — ${ctx.courtName}`,
+    intro: null,
+  });
+
   await queueEmail({
     type: "booking_confirmation",
     to: ctx.guestEmail,
-    subject: `Your court is booked — ${ctx.courtName}`,
+    subject: tpl.subject,
     react: BookingConfirmation({
       guestName: ctx.guestName,
       courtName: ctx.courtName,
@@ -67,6 +74,7 @@ export async function sendBookingEmails(ctx: BookingEmailContext): Promise<void>
       priceLabel,
       cancelUrl,
       mapUrl: MAP_URL,
+      intro: tpl.intro,
     }),
     attachments: [{ filename: "fourhand-booking.ics", content: ics }],
     payload: { cancelToken: ctx.cancelToken, sessions: ctx.sessions },
@@ -97,16 +105,21 @@ export async function sendCancellationEmail(ctx: {
   guestEmail: string;
   sessions: Session[];
 }): Promise<void> {
+  const tpl = await resolveTemplate(createAdminClient(), "cancellation", {
+    subject: `Booking cancelled — ${ctx.courtName}`,
+    intro: null,
+  });
   await queueEmail({
     type: "cancellation",
     to: ctx.guestEmail,
-    subject: `Booking cancelled — ${ctx.courtName}`,
+    subject: tpl.subject,
     react: Cancellation({
       guestName: ctx.guestName,
       courtName: ctx.courtName,
       dateLabel: dateLabel(ctx.sessions),
       timeLabels: timeLabels(ctx.sessions),
       bookUrl: siteUrl("/book"),
+      intro: tpl.intro,
     }),
   });
 }
@@ -118,10 +131,14 @@ export async function sendClosureNotice(ctx: {
   reason: string;
   sessions: Session[];
 }): Promise<void> {
+  const tpl = await resolveTemplate(createAdminClient(), "closure_notice", {
+    subject: `Court closed — ${ctx.courtName}`,
+    intro: null,
+  });
   await queueEmail({
     type: "closure_notice",
     to: ctx.guestEmail,
-    subject: `Court closed — ${ctx.courtName}`,
+    subject: tpl.subject,
     react: ClosureNotice({
       guestName: ctx.guestName,
       courtName: ctx.courtName,
@@ -129,6 +146,7 @@ export async function sendClosureNotice(ctx: {
       timeLabels: timeLabels(ctx.sessions),
       reason: ctx.reason,
       bookUrl: siteUrl("/book"),
+      intro: tpl.intro,
     }),
   });
 }

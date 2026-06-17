@@ -1,6 +1,6 @@
 import { manilaDayRange } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Court, Closure, Slot, SlotStatus } from "@/lib/supabase/types";
+import type { Court, Closure, Slot, SlotStatus, EmailTemplate } from "@/lib/supabase/types";
 import { getSlotsForCourt } from "@/lib/booking/queries";
 
 export interface ScheduleCell { startsAt: string; status: SlotStatus; guestName: string | null }
@@ -236,4 +236,14 @@ export async function getAdminDay(supabase: SupabaseClient, dateKey: string): Pr
     }));
 
   return { bookings, courtCount: count ?? 0 };
+}
+
+/** All email template overrides stored in the DB. */
+export async function getTemplates(supabase: SupabaseClient): Promise<EmailTemplate[]> {
+  const { data, error } = await supabase
+    .from("email_templates")
+    .select("*")
+    .order("type");
+  if (error) throw error;
+  return (data ?? []) as EmailTemplate[];
 }

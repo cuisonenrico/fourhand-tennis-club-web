@@ -9,6 +9,7 @@ export interface BookingConfirmationProps {
   priceLabel: string;
   cancelUrl: string;
   mapUrl: string;
+  intro?: string | null;
 }
 
 export default function BookingConfirmation({
@@ -19,12 +20,17 @@ export default function BookingConfirmation({
   priceLabel,
   cancelUrl,
   mapUrl,
+  intro,
 }: BookingConfirmationProps) {
   const hours = timeLabels.length;
   return (
     <EmailShell preview={`Your court is booked — ${courtName}, ${dateLabel}`}>
       <EmailHeading>You&apos;re on the court, {guestName.split(" ")[0]} 🎾</EmailHeading>
-      <EmailText>Your booking is confirmed. We&apos;ve attached a calendar invite so it&apos;s easy to remember.</EmailText>
+      {intro ? (
+        <EmailText>{intro}</EmailText>
+      ) : (
+        <EmailText>Your booking is confirmed. We&apos;ve attached a calendar invite so it&apos;s easy to remember.</EmailText>
+      )}
 
       <DetailRow label="Court" value={courtName} />
       <DetailRow label="Date" value={dateLabel} />

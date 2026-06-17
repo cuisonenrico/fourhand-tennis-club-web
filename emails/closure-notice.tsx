@@ -8,6 +8,7 @@ export interface ClosureNoticeProps {
   timeLabels: string[];
   reason: string;
   bookUrl: string;
+  intro?: string | null;
 }
 
 export default function ClosureNotice({
@@ -17,14 +18,19 @@ export default function ClosureNotice({
   timeLabels,
   reason,
   bookUrl,
+  intro,
 }: ClosureNoticeProps) {
   return (
     <EmailShell preview={`Court closed — ${courtName}, ${dateLabel}`}>
       <EmailHeading>We had to close your court</EmailHeading>
-      <EmailText>
-        Hi {guestName.split(" ")[0]}, unfortunately {courtName} is closed for your booking below
-        ({reason}). We&apos;ve cancelled it with no charge — sorry for the inconvenience.
-      </EmailText>
+      {intro ? (
+        <EmailText>{intro}</EmailText>
+      ) : (
+        <EmailText>
+          Hi {guestName.split(" ")[0]}, unfortunately {courtName} is closed for your booking below
+          ({reason}). We&apos;ve cancelled it with no charge — sorry for the inconvenience.
+        </EmailText>
+      )}
       <DetailRow label="Court" value={courtName} />
       <DetailRow label="Date" value={dateLabel} />
       <SessionList times={timeLabels} />

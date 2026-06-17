@@ -84,6 +84,21 @@ export const reassignSchema = z.object({
 });
 export type ReassignInput = z.infer<typeof reassignSchema>;
 
+export const KNOWN_EMAIL_TYPES = [
+  "booking_confirmation",
+  "cancellation",
+  "closure_notice",
+  "booking_reminder",
+] as const;
+export type EmailTemplateType = (typeof KNOWN_EMAIL_TYPES)[number];
+
+export const templateSchema = z.object({
+  type: z.enum(KNOWN_EMAIL_TYPES),
+  subject: z.string().min(1, "Subject required").max(200),
+  intro: z.string().max(1000).nullable().optional(),
+});
+export type TemplateInput = z.infer<typeof templateSchema>;
+
 export type ConfirmBookingInput = z.infer<typeof confirmBookingSchema>;
 export type ContactInput = z.infer<typeof contactSchema>;
 export type GuestInput = z.infer<typeof guestSchema>;

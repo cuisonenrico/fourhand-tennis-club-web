@@ -7,6 +7,7 @@ export interface CancellationProps {
   dateLabel: string;
   timeLabels: string[];
   bookUrl: string;
+  intro?: string | null;
 }
 
 export default function Cancellation({
@@ -15,11 +16,16 @@ export default function Cancellation({
   dateLabel,
   timeLabels,
   bookUrl,
+  intro,
 }: CancellationProps) {
   return (
     <EmailShell preview={`Booking cancelled — ${courtName}, ${dateLabel}`}>
       <EmailHeading>Your booking is cancelled</EmailHeading>
-      <EmailText>Hi {guestName.split(" ")[0]}, we&apos;ve cancelled the booking below. No charge applies.</EmailText>
+      {intro ? (
+        <EmailText>{intro}</EmailText>
+      ) : (
+        <EmailText>Hi {guestName.split(" ")[0]}, we&apos;ve cancelled the booking below. No charge applies.</EmailText>
+      )}
       <DetailRow label="Court" value={courtName} />
       <DetailRow label="Date" value={dateLabel} />
       <SessionList times={timeLabels} />

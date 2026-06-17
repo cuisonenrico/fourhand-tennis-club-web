@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/supabase/server";
 import { recordAudit } from "@/lib/admin/audit";
-import { courtSchema, closureSchema, adminBookingSchema, reassignSchema } from "@/lib/validation";
+import { courtSchema, closureSchema, adminBookingSchema, reassignSchema, templateSchema } from "@/lib/validation";
+import { getTemplates } from "@/lib/admin/queries";
 import { sendClosureNotice, sendBookingEmails } from "@/lib/email/send";
 import { cancelBookingAction } from "@/lib/booking/actions";
 import type { AdminReassignResult } from "@/lib/supabase/types";
@@ -296,3 +297,32 @@ export async function upsertCourtAction(input: unknown): Promise<ActionResult> {
   revalidatePath("/admin/courts");
   return { ok: true };
 }
+
+export async function upsertTemplateAction(input: unknown): Promise<ActionResult> {
+  const parsed = templateSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid template" };
+
+  const actor = await requireAdminEmail();
+  const supabase = createAdminClient();
+  const { type, subject, intro } = parsed.data;
+
+  const { error } = await supabase
+    .from("email_templates")
+    .upsert(
+      { type, subject, intro: intro ?? null, updated_by: actor, updated_at: new Date().toISOString() },
+      { onConflict: "type" },
+    );
+  if (error) return { ok: false, error: error.message };
+
+  await recordAudit(supabase, {
+    actorEmail: actor,
+    action: "template.update",
+    targetType: "email_template",
+    targetId: type,
+    detail: { subject, intro: intro ?? null },
+  });
+  revalidatePath("/admin/templates");
+  return { ok: true };
+}
+
+export { getTemplates };
