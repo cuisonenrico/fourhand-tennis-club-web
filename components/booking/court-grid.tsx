@@ -159,8 +159,12 @@ export function CourtGrid({
   }
 
   function closePanel() {
-    // Closing the panel mid-checkout abandons the hold — free it now.
-    if (phase === "confirm") releaseActiveHold(selectedSlots.map((s) => s.id), holdKey);
+    // Closing mid-checkout keeps the hold alive so the guest can resume or cancel
+    // it from the banner; only confirming or an explicit Cancel releases it.
+    if (phase === "confirm") {
+      const saved = readPendingHold();
+      if (saved && isHoldLive(saved)) setResumable(saved);
+    }
     setSelectedCourtId(null);
     setPhase("slots");
     setSelectedSlots([]);

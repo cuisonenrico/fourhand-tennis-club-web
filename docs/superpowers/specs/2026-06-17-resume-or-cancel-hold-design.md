@@ -133,12 +133,17 @@ crash.
 - **Write** the pending hold when `continueToConfirm` succeeds (right after
   `setHoldKey` / `setIdemKey` / `setPhase("confirm")`), capturing the current
   court, date, slots, and the hold's `expiresAt`.
-- **Clear** the pending hold when:
-  - `confirm` returns `confirmed` or `slot_taken`;
-  - the guest clicks **Back** (confirm → slots);
-  - the guest **closes the panel** (`closePanel`) while in the confirm phase.
-  In the Back and close cases, also call `releaseHoldAction({ slot_ids, hold_key })`
-  so the slots free immediately and availability refreshes.
+- **Clear** the pending hold (and call `releaseHoldAction({ slot_ids, hold_key })`
+  to free the slots) when:
+  - `confirm` returns `confirmed` or `slot_taken` (clear only — the RPC already
+    freed/booked the slots);
+  - the guest clicks **Back** (confirm → slots) — they are changing their
+    selection, so the old hold is released and re-created on the next Continue.
+- **Keep** the pending hold alive when the guest **closes the panel**
+  (`closePanel`) mid-confirm: closing is treated as stepping away, not cancelling.
+  The resume banner is surfaced immediately (and again on the next page load) so
+  the guest can resume or explicitly cancel. The hold's own 5-minute expiry is the
+  backstop.
 - **On mount**, read the pending hold:
   - if present and `expiresAt > now()` → set banner state;
   - otherwise → `clearPendingHold()` and show nothing.
@@ -159,8 +164,10 @@ crash.
    - hold still live → banner → **Resume** (back into confirm) or **Cancel hold**
      (release + clear).
    - hold expired → entry cleared silently, normal fresh board.
-4. Deliberate **Back** / **panel close** / **confirm** / **slot taken** →
-   `clearPendingHold` (and `releaseHoldAction` for Back/close) → no orphan.
+4. Closing the panel mid-confirm → hold kept → resume banner shown immediately
+   (and on the next load).
+5. **Back** / **confirm** / **slot taken** → `clearPendingHold` (and
+   `releaseHoldAction` for Back) → no orphan.
 
 ## Error handling
 
@@ -184,7 +191,9 @@ crash.
   - Hold → close tab → reopen → banner shows → **Resume** → confirm succeeds.
   - Hold → close tab → reopen → banner shows → **Cancel hold** → slots free again.
   - Hold → wait past expiry → reopen → no banner, entry cleared.
-  - Hold → **Back** / close panel → slots free immediately, no banner on reload.
+  - Hold → close panel → banner appears; persists across reload until resumed or
+    cancelled.
+  - Hold → **Back** → slot frees immediately, no banner on reload.
 
 ## Out of scope
 
