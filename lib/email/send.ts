@@ -9,6 +9,7 @@ import Cancellation from "@/emails/cancellation";
 import ContactAck from "@/emails/contact-ack";
 import ClosureNotice from "@/emails/closure-notice";
 import BookingReassigned from "@/emails/booking-reassigned";
+import BookingReminder from "@/emails/booking-reminder";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveTemplate } from "@/lib/email/templates";
 
@@ -168,6 +169,32 @@ export async function sendBookingReassigned(ctx: {
       dateLabel: dateLabel(ctx.sessions),
       timeLabels: timeLabels(ctx.sessions),
       cancelUrl: siteUrl(`/cancel/${ctx.cancelToken}`),
+    }),
+  });
+}
+
+export async function sendBookingReminder(ctx: {
+  courtName: string;
+  guestName: string;
+  guestEmail: string;
+  cancelToken: string;
+  sessions: Session[];
+}): Promise<void> {
+  const tpl = await resolveTemplate(createAdminClient(), "booking_reminder", {
+    subject: `Reminder: your court is coming up — ${ctx.courtName}`,
+    intro: null,
+  });
+  await queueEmail({
+    type: "booking_reminder",
+    to: ctx.guestEmail,
+    subject: tpl.subject,
+    react: BookingReminder({
+      guestName: ctx.guestName,
+      courtName: ctx.courtName,
+      dateLabel: dateLabel(ctx.sessions),
+      timeLabels: timeLabels(ctx.sessions),
+      cancelUrl: siteUrl(`/cancel/${ctx.cancelToken}`),
+      intro: tpl.intro,
     }),
   });
 }
