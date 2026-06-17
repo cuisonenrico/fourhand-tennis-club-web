@@ -5,8 +5,9 @@
 
 export type CourtSurface = "hard" | "clay" | "grass";
 export type CourtEnvironment = "indoor" | "outdoor";
-export type SlotStatus = "free" | "held" | "booked";
+export type SlotStatus = "free" | "held" | "booked" | "closed";
 export type BookingStatus = "confirmed" | "cancelled";
+export type BookingSource = "guest" | "admin";
 export type EmailStatus = "queued" | "sent" | "failed";
 
 export interface Court {
@@ -46,6 +47,9 @@ export interface Booking {
   cancel_token: string;
   booking_group_id: string | null;
   created_at: string;
+  source: BookingSource;
+  reassigned_from_slot: string | null;
+  reminded_at: string | null;
 }
 
 export interface PricingRule {
@@ -67,6 +71,50 @@ export interface EmailLog {
   created_at: string;
 }
 
+export interface Closure {
+  id: string;
+  court_id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string;
+  status: "active" | "lifted";
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface EmailTemplate {
+  type: string;
+  subject: string;
+  intro: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export interface BusinessSettings {
+  id: boolean;
+  club_name: string;
+  logo_path: string | null;
+  accent_hex: string;
+  contact_email: string | null;
+  contact_phone: string | null;
+  default_open_time: string;
+  default_close_time: string;
+  cancellation_window_hours: number;
+  reminder_offset_hours: number;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export interface AdminAudit {
+  id: string;
+  actor_email: string;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string;
+}
+
 /** Shape returned by the confirm_booking RPC (single slot). */
 export interface ConfirmBookingResult {
   booking_id: string;
@@ -81,4 +129,28 @@ export interface ConfirmMultiResult {
   cancel_token: string;
   total_price_cents: number;
   status: "confirmed" | "slot_taken";
+}
+
+/** Shape returned by the close_court RPC. */
+export interface CloseCourtRow {
+  booking_group_id: string | null;
+  guest_name: string;
+  guest_email: string;
+  cancel_token: string;
+  slot_starts_at: string;
+  slot_ends_at: string;
+}
+
+/** Shape returned by the admin_create RPC. */
+export interface AdminCreateResult {
+  booking_group_id: string | null;
+  cancel_token: string | null;
+  total_price_cents: number | null;
+  status: "confirmed" | "slot_taken" | "slot_closed";
+}
+
+/** Shape returned by the admin_reassign RPC. */
+export interface AdminReassignResult {
+  status: "reassigned" | "slot_taken";
+  total_price_cents: number | null;
 }
