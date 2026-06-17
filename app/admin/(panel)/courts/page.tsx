@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCourtsAdmin, getActiveClosures } from "@/lib/admin/queries";
 import { CourtEditor } from "@/components/admin/court-editor";
 import { ClosurePanel } from "@/components/admin/closure-panel";
+import { ScheduleGrid } from "@/components/admin/schedule-grid";
 
 export const metadata: Metadata = { title: "Courts & schedule", robots: { index: false } };
 
@@ -20,6 +21,9 @@ export default async function CourtsPage() {
       </section>
       <section>
         <ClosurePanel courts={courts} closures={closures} />
+      </section>
+      <section>
+        <ScheduleGrid courts={courts} />
       </section>
     </div>
   );

@@ -1,6 +1,29 @@
 import { manilaDayRange } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Court, Closure } from "@/lib/supabase/types";
+import type { Court, Closure, SlotStatus } from "@/lib/supabase/types";
+
+export interface ScheduleCell { startsAt: string; status: SlotStatus; guestName: string | null }
+export interface ScheduleRow { court: Court; cells: ScheduleCell[] }
+export interface ScheduleGridData { rows: ScheduleRow[] }
+
+export async function getScheduleGrid(supabase: SupabaseClient, dateKey: string): Promise<ScheduleGridData> {
+  const { startIso, endIso } = manilaDayRange(dateKey);
+  const courts = await getCourtsAdmin(supabase);
+  const { data: slots, error } = await supabase
+    .from("slots")
+    .select("court_id,starts_at,status, bookings!left(guest_name,status)")
+    .gte("starts_at", startIso).lt("starts_at", endIso).order("starts_at");
+  if (error) throw error;
+
+  type Row = { court_id: string; starts_at: string; status: SlotStatus; bookings: { guest_name: string; status: string }[] };
+  const byCourt = new Map<string, ScheduleCell[]>();
+  for (const s of (slots ?? []) as unknown as Row[]) {
+    const confirmed = s.bookings?.find((b) => b.status === "confirmed");
+    const cell: ScheduleCell = { startsAt: s.starts_at, status: s.status, guestName: confirmed?.guest_name ?? null };
+    byCourt.set(s.court_id, [...(byCourt.get(s.court_id) ?? []), cell]);
+  }
+  return { rows: courts.map((court) => ({ court, cells: byCourt.get(court.id) ?? [] })) };
+}
 
 export interface ActiveClosure extends Closure {
   courtName: string;
