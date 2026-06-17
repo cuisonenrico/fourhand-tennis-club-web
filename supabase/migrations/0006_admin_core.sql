@@ -98,9 +98,11 @@ begin
   values (p_court_id, p_starts_at, p_ends_at, p_reason, p_actor)
   returning id into v_closure;
 
-  -- Lock affected slots so a concurrent confirm waits.
+  -- Lock affected slots so a concurrent confirm waits. Lock in id order to match
+  -- the guest path (confirm_booking_multi) and avoid AB/BA deadlocks.
   perform 1 from slots
    where court_id = p_court_id and starts_at < p_ends_at and ends_at > p_starts_at
+   order by id
    for update;
 
   -- Lock affected confirmed booking rows so concurrent admin ops on the same bookings serialise.
