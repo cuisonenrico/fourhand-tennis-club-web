@@ -36,13 +36,13 @@ lib/email/templates.ts                        NEW — resolve subject/intro over
 lib/email/send.ts                             MODIFY — closure + reminder senders; apply overrides
 emails/closure-notice.tsx                     NEW
 emails/booking-reminder.tsx                   NEW
-app/admin/layout.tsx                          NEW — admin shell (guard + nav)
-app/admin/page.tsx                            MODIFY — dashboard
-app/admin/courts/page.tsx                     NEW
-app/admin/bookings/page.tsx                   NEW
-app/admin/templates/page.tsx                  NEW
-app/admin/settings/page.tsx                   NEW
-app/admin/reports/page.tsx                    NEW
+app/admin/(panel)/layout.tsx                  NEW — admin shell (guard + header + nav)
+app/admin/(panel)/page.tsx                    NEW — dashboard (moved from app/admin/page.tsx)
+app/admin/(panel)/courts/page.tsx             NEW
+app/admin/(panel)/bookings/page.tsx           NEW
+app/admin/(panel)/templates/page.tsx          NEW
+app/admin/(panel)/settings/page.tsx           NEW
+app/admin/(panel)/reports/page.tsx            NEW
 app/api/cron/send-reminders/route.ts          NEW
 app/api/admin/export/route.ts                 NEW — CSV
 components/admin/*                             NEW section components (listed per task)
@@ -520,11 +520,13 @@ git commit -m "feat(types): admin core domain + RPC result types"
 
 **Files:**
 - Create: `lib/admin/audit.ts`
-- Create: `app/admin/layout.tsx`
+- Create: `app/admin/(panel)/layout.tsx`
 - Create: `components/admin/admin-nav.tsx`
-- Modify: `components/admin/admin-header.tsx` (accept children for nav)
+- Move + modify: `app/admin/page.tsx` → `app/admin/(panel)/page.tsx`
 
-**Interfaces — Produces:** `recordAudit(supabase, entry)`; admin layout wrapping all `/admin/*` pages except `/admin/login`.
+**Interfaces — Produces:** `recordAudit(supabase, entry)`; a route-group layout wrapping every authenticated admin page (`/admin`, `/admin/courts`, …) but NOT `/admin/login`.
+
+> **Route group:** `(panel)` is a Next.js route group — the folder name in parentheses does **not** appear in the URL. So `app/admin/(panel)/page.tsx` still serves `/admin`, `app/admin/(panel)/courts/page.tsx` serves `/admin/courts`, etc. `app/admin/login/page.tsx` stays *outside* the group and therefore does not inherit the panel layout — cleanly excluding login from the guard + shell with no path/header hacks. `middleware.ts` already guards `/admin/*` except login; the layout guard adds the signed-in user's email for the header.
 
 - [ ] **Step 1: Audit helper**
 
@@ -606,27 +608,26 @@ export function AdminNav() {
 }
 ```
 
-- [ ] **Step 3: Admin layout**
+- [ ] **Step 3: Admin panel layout (route group)**
 
-Create `app/admin/layout.tsx`. The login page renders its own minimal chrome, so the shell skips nav there by reading the segment is not feasible in a layout; instead the layout guards auth and renders the shell, and the login page lives under a route that this layout still wraps. To avoid wrapping login with nav, the login page sets its own full-screen content; keep the layout guard tolerant:
+First move the existing dashboard page into the route group (quote the parens so the shell doesn't glob them):
+
+```bash
+mkdir -p "app/admin/(panel)"
+git mv app/admin/page.tsx "app/admin/(panel)/page.tsx"
+```
+
+Create `app/admin/(panel)/layout.tsx` — guards auth and renders the shell for every panel page. Because `app/admin/login` is outside this group, login is untouched:
 
 ```tsx
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { getSessionUser } from "@/lib/supabase/server";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AdminNav } from "@/components/admin/admin-nav";
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  // Login page is public; detect it via the request path.
-  const pathname = (await headers()).get("x-pathname") ?? "";
-  const isLogin = pathname.endsWith("/admin/login");
-
-  if (isLogin) return <>{children}</>;
-
+export default async function AdminPanelLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser();
   if (!user) redirect("/admin/login");
-
   return (
     <>
       <AdminHeader email={user.email ?? undefined} />
@@ -637,18 +638,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 }
 ```
 
-To make `x-pathname` available, set it in `middleware.ts` (which already runs for `/admin/*`). Add near the top of the middleware response, before returning:
+- [ ] **Step 4: Simplify the moved dashboard page (layout now owns chrome)**
 
-```ts
-// Expose the path to server components/layouts.
-response.headers.set("x-pathname", request.nextUrl.pathname);
-```
-
-(If the existing middleware returns multiple response objects, set the header on each returned `NextResponse`.)
-
-- [ ] **Step 4: Simplify the existing dashboard page (layout now owns chrome)**
-
-Modify `app/admin/page.tsx` to drop the now-duplicated header/main (the layout provides them). It becomes:
+Modify `app/admin/(panel)/page.tsx` to drop the now-duplicated header/main/guard (the layout provides them). It becomes:
 
 ```tsx
 import type { Metadata } from "next";
@@ -677,11 +669,11 @@ export default async function AdminOverviewPage() {
 
 - [ ] **Step 5: Verify + commit**
 
-Run: `npm run typecheck` — Expected: PASS (note: `getAdminDashboard` lands in Task 4; if executing strictly task-by-task, do Task 4 before typecheck, or stub the import). Commit:
+Run: `npm run typecheck` — Expected: PASS (note: `getAdminDashboard` lands in Task 4; if executing strictly task-by-task, do Task 4 before typecheck, or temporarily keep the existing `getAdminDay` call and swap in Task 4). Commit (use `git add -A` so the `git mv` rename is staged):
 
 ```bash
-git add lib/admin/audit.ts app/admin/layout.tsx components/admin/admin-nav.tsx components/admin/admin-header.tsx app/admin/page.tsx middleware.ts
-git commit -m "feat(admin): navigable admin shell + audit helper"
+git add -A
+git commit -m "feat(admin): navigable admin shell (route group) + audit helper"
 ```
 
 ---
@@ -832,7 +824,7 @@ git commit -m "feat(admin): dashboard revenue + occupancy + next-booking metrics
 - Modify: `lib/admin/queries.ts` (add `getCourtsAdmin`)
 - Modify: `lib/admin/actions.ts` (create file in this task)
 - Modify: `lib/validation.ts` (court schema)
-- Create: `app/admin/courts/page.tsx`
+- Create: `app/admin/(panel)/courts/page.tsx`
 - Create: `components/admin/court-editor.tsx`
 
 **Interfaces:**
@@ -924,7 +916,7 @@ export async function upsertCourtAction(input: unknown): Promise<ActionResult> {
 
 Create `components/admin/court-editor.tsx` — a client component listing courts with an inline edit form per court and an "Add court" form, calling `upsertCourtAction`. Use the existing `Button`. Form fields map to `courtSchema`. On success it calls `router.refresh()`.
 
-Create `app/admin/courts/page.tsx` (server component):
+Create `app/admin/(panel)/courts/page.tsx` (server component):
 
 ```tsx
 import type { Metadata } from "next";
@@ -958,7 +950,7 @@ export default async function CourtsPage() {
 Run: `npm run typecheck` — Expected: PASS (with Task 6/7 imports stubbed/commented as noted).
 
 ```bash
-git add lib/admin/queries.ts lib/admin/actions.ts lib/validation.ts app/admin/courts/page.tsx components/admin/court-editor.tsx
+git add lib/admin/queries.ts lib/admin/actions.ts lib/validation.ts app/admin/(panel)/courts/page.tsx components/admin/court-editor.tsx
 git commit -m "feat(admin): court CRUD"
 ```
 
@@ -1171,14 +1163,14 @@ export const closureSchema = z.object({
 
 Create `components/admin/closure-panel.tsx` (client component): court select, start/end `datetime-local` inputs (converted to ISO with `+08:00`), reason text; **Preview impact** button calls `previewClosureAction` and lists affected players; **Confirm closure** calls `closeCourtAction`. Below, a list of active closures (passed from the page) each with a **Reopen** button calling `reopenClosureAction`. Use `Button` variants.
 
-Update `app/admin/courts/page.tsx` to fetch `getActiveClosures` and pass to `ClosurePanel`.
+Update `app/admin/(panel)/courts/page.tsx` to fetch `getActiveClosures` and pass to `ClosurePanel`.
 
 - [ ] **Step 5: Verify + commit**
 
 Run: `npm run typecheck` — Expected: PASS.
 
 ```bash
-git add lib/admin/actions.ts lib/admin/queries.ts lib/validation.ts lib/email/send.ts emails/closure-notice.tsx components/admin/closure-panel.tsx app/admin/courts/page.tsx
+git add lib/admin/actions.ts lib/admin/queries.ts lib/validation.ts lib/email/send.ts emails/closure-notice.tsx components/admin/closure-panel.tsx app/admin/(panel)/courts/page.tsx
 git commit -m "feat(admin): time-ranged court closures with impact preview + rebook-link notify"
 ```
 
@@ -1233,7 +1225,7 @@ Create `components/admin/schedule-grid.tsx` (client component with its own `Admi
 Run: `npm run typecheck` — Expected: PASS.
 
 ```bash
-git add lib/admin/queries.ts components/admin/schedule-grid.tsx app/admin/courts/page.tsx
+git add lib/admin/queries.ts components/admin/schedule-grid.tsx app/admin/(panel)/courts/page.tsx
 git commit -m "feat(admin): day schedule grid across courts"
 ```
 
@@ -1243,7 +1235,7 @@ git commit -m "feat(admin): day schedule grid across courts"
 
 **Files:**
 - Modify: `lib/admin/queries.ts` (`searchBookings`)
-- Create: `app/admin/bookings/page.tsx`
+- Create: `app/admin/(panel)/bookings/page.tsx`
 - Create: `components/admin/bookings-manager.tsx`
 
 **Interfaces:**
@@ -1310,7 +1302,7 @@ export async function searchBookings(
 
 - [ ] **Step 2: Bookings page + manager UI**
 
-Create `app/admin/bookings/page.tsx` (server component) that loads courts + today's bookings and renders `<BookingsManager>`. Create `components/admin/bookings-manager.tsx` (client): filter bar (date, court select, status, search box) that re-queries via a server action wrapper `searchBookingsAction(filters)` (add a thin wrapper in `lib/admin/actions.ts` calling `searchBookings`), a results table (time, court, player, email/phone, source badge, status), and per-row action buttons wired in Tasks 9–10.
+Create `app/admin/(panel)/bookings/page.tsx` (server component) that loads courts + today's bookings and renders `<BookingsManager>`. Create `components/admin/bookings-manager.tsx` (client): filter bar (date, court select, status, search box) that re-queries via a server action wrapper `searchBookingsAction(filters)` (add a thin wrapper in `lib/admin/actions.ts` calling `searchBookings`), a results table (time, court, player, email/phone, source badge, status), and per-row action buttons wired in Tasks 9–10.
 
 Add to `lib/admin/actions.ts`:
 
@@ -1328,7 +1320,7 @@ export async function searchBookingsAction(filters: BookingFilters): Promise<Adm
 Run: `npm run typecheck` — Expected: PASS.
 
 ```bash
-git add lib/admin/queries.ts lib/admin/actions.ts app/admin/bookings/page.tsx components/admin/bookings-manager.tsx
+git add lib/admin/queries.ts lib/admin/actions.ts app/admin/(panel)/bookings/page.tsx components/admin/bookings-manager.tsx
 git commit -m "feat(admin): bookings search + filter list"
 ```
 
@@ -1515,26 +1507,62 @@ export async function adminReassignAction(input: unknown): Promise<ActionResult>
 }
 ```
 
-Add a lightweight reassign email to `lib/email/send.ts` reusing the `Cancellation`-style shell (or a new `booking-confirmation` re-send). Minimal version reuses `BookingConfirmation` copy:
+Create a **dedicated** `emails/booking-reassigned.tsx` template (do NOT reuse `Cancellation` — its "we've cancelled, no charge" copy is wrong for a move). Mirror `closure-notice.tsx` structure:
+
+```tsx
+import * as React from "react";
+import { DetailRow, EmailButton, EmailHeading, EmailShell, EmailText, SessionList } from "./components";
+
+export interface BookingReassignedProps {
+  guestName: string; courtName: string; dateLabel: string; timeLabels: string[]; cancelUrl: string;
+}
+
+export default function BookingReassigned({
+  guestName, courtName, dateLabel, timeLabels, cancelUrl,
+}: BookingReassignedProps) {
+  return (
+    <EmailShell preview={`Booking updated — ${courtName}, ${dateLabel}`}>
+      <EmailHeading>Your booking was moved</EmailHeading>
+      <EmailText>
+        Hi {guestName.split(" ")[0]}, we&apos;ve moved your booking. Here are the new details —
+        no charge applies.
+      </EmailText>
+      <DetailRow label="Court" value={courtName} />
+      <DetailRow label="Date" value={dateLabel} />
+      <SessionList times={timeLabels} />
+      <EmailButton href={cancelUrl}>View or cancel</EmailButton>
+    </EmailShell>
+  );
+}
+
+BookingReassigned.PreviewProps = {
+  guestName: "Ana Cruz", courtName: "Court 2", dateLabel: "Wed, 1 Jul 2026",
+  timeLabels: ["7:00 PM – 8:00 PM"], cancelUrl: "https://fourhand.example/cancel/x",
+} satisfies BookingReassignedProps;
+```
+
+Add the sender to `lib/email/send.ts` (the action calls `sendBookingReassigned`); it needs the booking's `cancelToken` to build `cancelUrl`, so include it in the action's call:
 
 ```ts
+import BookingReassigned from "@/emails/booking-reassigned";
+
 export async function sendBookingReassigned(ctx: {
-  courtName: string; guestName: string; guestEmail: string; sessions: Session[];
+  courtName: string; guestName: string; guestEmail: string; cancelToken: string; sessions: Session[];
 }): Promise<void> {
   await queueEmail({
     type: "booking_reassigned",
     to: ctx.guestEmail,
     subject: `Your booking was moved — ${ctx.courtName}`,
-    react: Cancellation({
+    react: BookingReassigned({
       guestName: ctx.guestName, courtName: ctx.courtName,
       dateLabel: dateLabel(ctx.sessions), timeLabels: timeLabels(ctx.sessions),
-      bookUrl: siteUrl("/book"),
+      cancelUrl: siteUrl(`/cancel/${ctx.cancelToken}`),
     }),
   });
 }
 ```
 
-> Reviewer note: a dedicated `booking-reassigned.tsx` template reads better than reusing `Cancellation`; create one if time allows (same structure as `closure-notice.tsx`).
+In `adminReassignAction` (Step 1 code above), the `sendBookingReassigned` call must also pass `cancelToken: list[0]` — select `cancel_token` in that query and pass it through.
 
 - [ ] **Step 2: Row actions UI**
 
@@ -1545,7 +1573,7 @@ In `components/admin/bookings-manager.tsx` add per confirmed row: **Cancel** (co
 Run: `npm run typecheck` — Expected: PASS.
 
 ```bash
-git add lib/admin/actions.ts lib/validation.ts lib/email/send.ts components/admin/bookings-manager.tsx
+git add lib/admin/actions.ts lib/validation.ts lib/email/send.ts emails/booking-reassigned.tsx components/admin/bookings-manager.tsx
 git commit -m "feat(admin): cancel + reassign bookings"
 ```
 
@@ -1558,7 +1586,7 @@ git commit -m "feat(admin): cancel + reassign bookings"
 - Modify: `lib/email/send.ts` (apply subject/intro overrides)
 - Modify: `lib/admin/actions.ts` (`upsertTemplateAction`)
 - Modify: `lib/admin/queries.ts` (`getTemplates`)
-- Create: `app/admin/templates/page.tsx`
+- Create: `app/admin/(panel)/templates/page.tsx`
 - Create: `components/admin/template-editor.tsx`
 - Test: `lib/email/templates.test.ts`
 
@@ -1614,14 +1642,14 @@ export async function resolveTemplate(
 
 In `lib/email/send.ts`, for each sender resolve the subject/intro via `resolveTemplate(createAdminClient(), type, {subject, intro})` and pass `intro` into the template (templates already render copy; add an optional `intro` prop where applicable, falling back to existing text). Keep changes minimal: at least `booking_confirmation`, `cancellation`, `closure_notice`, `booking_reminder` honour overrides.
 
-Add `getTemplates` to `queries.ts` (select all from `email_templates`) and `upsertTemplateAction` to `actions.ts` (validate `type` against a known list, upsert, audit `template.update`). Build `template-editor.tsx` listing each known type with editable subject + intro and a save button; `app/admin/templates/page.tsx` loads `getTemplates` + the known-type defaults.
+Add `getTemplates` to `queries.ts` (select all from `email_templates`) and `upsertTemplateAction` to `actions.ts` (validate `type` against a known list, upsert, audit `template.update`). Build `template-editor.tsx` listing each known type with editable subject + intro and a save button; `app/admin/(panel)/templates/page.tsx` loads `getTemplates` + the known-type defaults.
 
 - [ ] **Step 6: Verify + commit**
 
 Run: `npm run typecheck && npm run test -- templates` — Expected: PASS.
 
 ```bash
-git add lib/email/templates.ts lib/email/templates.test.ts lib/email/send.ts lib/admin/actions.ts lib/admin/queries.ts app/admin/templates/page.tsx components/admin/template-editor.tsx
+git add lib/email/templates.ts lib/email/templates.test.ts lib/email/send.ts lib/admin/actions.ts lib/admin/queries.ts app/admin/(panel)/templates/page.tsx components/admin/template-editor.tsx
 git commit -m "feat(admin): editable email copy with code-default fallback"
 ```
 
@@ -1713,7 +1741,7 @@ git commit -m "feat(admin): booking reminders (template + hourly cron)"
 - Modify: `lib/admin/queries.ts` (`getBusinessSettings`)
 - Modify: `lib/admin/actions.ts` (`updateSettingsAction`)
 - Modify: `lib/validation.ts` (`settingsSchema`)
-- Create: `app/admin/settings/page.tsx`
+- Create: `app/admin/(panel)/settings/page.tsx`
 - Create: `components/admin/settings-form.tsx`
 
 **Interfaces:**
@@ -1766,14 +1794,14 @@ export async function updateSettingsAction(input: unknown): Promise<ActionResult
 }
 ```
 
-- [ ] **Step 2: Settings page + form** — create `components/admin/settings-form.tsx` (client) over `settingsSchema`, and `app/admin/settings/page.tsx` loading `getBusinessSettings`.
+- [ ] **Step 2: Settings page + form** — create `components/admin/settings-form.tsx` (client) over `settingsSchema`, and `app/admin/(panel)/settings/page.tsx` loading `getBusinessSettings`.
 
 - [ ] **Step 3: Verify + commit**
 
 Run: `npm run typecheck` — Expected: PASS.
 
 ```bash
-git add lib/admin/queries.ts lib/admin/actions.ts lib/validation.ts app/admin/settings/page.tsx components/admin/settings-form.tsx
+git add lib/admin/queries.ts lib/admin/actions.ts lib/validation.ts app/admin/(panel)/settings/page.tsx components/admin/settings-form.tsx
 git commit -m "feat(admin): business settings (branding, hours, cancellation, reminder offset)"
 ```
 
@@ -1785,7 +1813,7 @@ git commit -m "feat(admin): business settings (branding, hours, cancellation, re
 - Modify: `lib/admin/queries.ts` (`getReport`)
 - Create: `lib/admin/csv.ts`
 - Create: `app/api/admin/export/route.ts`
-- Create: `app/admin/reports/page.tsx`
+- Create: `app/admin/(panel)/reports/page.tsx`
 - Create: `components/admin/reports-view.tsx`
 - Test: `lib/admin/csv.test.ts`
 
@@ -1833,14 +1861,14 @@ export function toCsv(rows: Record<string, unknown>[], headers?: string[]): stri
 
 - [ ] **Step 5: Report query + export route + UI**
 
-Add `getReport` to `queries.ts` (loop Manila days in range: revenue = Σ confirmed price for that day; booked/bookable from slots excluding `closed`). Create `app/api/admin/export/route.ts` (guarded by `getSessionUser`; `?start=&end=` → `getReport` → `toCsv` → `text/csv` response with `Content-Disposition`). Create `components/admin/reports-view.tsx` (date-range pickers, totals, a simple per-day bar list, and a "Download CSV" link to the export route) and `app/admin/reports/page.tsx`.
+Add `getReport` to `queries.ts` (loop Manila days in range: revenue = Σ confirmed price for that day; booked/bookable from slots excluding `closed`). Create `app/api/admin/export/route.ts` (guarded by `getSessionUser`; `?start=&end=` → `getReport` → `toCsv` → `text/csv` response with `Content-Disposition`). Create `components/admin/reports-view.tsx` (date-range pickers, totals, a simple per-day bar list, and a "Download CSV" link to the export route) and `app/admin/(panel)/reports/page.tsx`.
 
 - [ ] **Step 6: Verify + commit**
 
 Run: `npm run typecheck && npm run test -- csv` — Expected: PASS.
 
 ```bash
-git add lib/admin/queries.ts lib/admin/csv.ts lib/admin/csv.test.ts app/api/admin/export/route.ts app/admin/reports/page.tsx components/admin/reports-view.tsx
+git add lib/admin/queries.ts lib/admin/csv.ts lib/admin/csv.test.ts app/api/admin/export/route.ts app/admin/(panel)/reports/page.tsx components/admin/reports-view.tsx
 git commit -m "feat(admin): revenue + occupancy reports with CSV export"
 ```
 
