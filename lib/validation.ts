@@ -48,6 +48,20 @@ export const contactSchema = z.object({
   message: z.string().trim().min(10, "Tell us a little more").max(2000),
 });
 
+export const courtSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().min(1, "Name required"),
+  surface: z.enum(["hard", "clay", "grass"]),
+  environment: z.enum(["indoor", "outdoor"]),
+  lighting: z.boolean(),
+  open_time: z.string().regex(/^\d{2}:\d{2}$/, "HH:MM"),
+  close_time: z.string().regex(/^\d{2}:\d{2}$/, "HH:MM"),
+  status: z.enum(["active", "maintenance"]),
+  sort_order: z.number().int().min(0),
+  blurb: z.string().optional().nullable(),
+});
+export type CourtInput = z.infer<typeof courtSchema>;
+
 export type ConfirmBookingInput = z.infer<typeof confirmBookingSchema>;
 export type ContactInput = z.infer<typeof contactSchema>;
 export type GuestInput = z.infer<typeof guestSchema>;

@@ -1,5 +1,13 @@
 import { manilaDayRange } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Court } from "@/lib/supabase/types";
+
+/** All courts (incl. maintenance) in display order, for admin. */
+export async function getCourtsAdmin(supabase: SupabaseClient): Promise<Court[]> {
+  const { data, error } = await supabase.from("courts").select("*").order("sort_order");
+  if (error) throw error;
+  return (data ?? []) as Court[];
+}
 
 export function summariseRevenue(bookings: AdminBooking[]): number {
   return bookings
