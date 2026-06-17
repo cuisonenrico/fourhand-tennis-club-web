@@ -42,11 +42,11 @@ Scheduled in `vercel.json`:
 
 ```jsonc
 // vercel.json (extract)
-{ "path": "/api/cron/send-reminders", "schedule": "0 * * * *" }  // every hour
+{ "path": "/api/cron/send-reminders", "schedule": "0 1 * * *" }  // daily, 09:00 Asia/Manila
 { "path": "/api/cron/release-holds",   "schedule": "0 0 * * *" }  // daily cosmetic cleanup
 ```
 
-Vercel Hobby allows one cron per day — upgrade to Pro for the hourly reminder schedule. Alternatively, apply `supabase/optional_pg_cron.sql` for in-DB scheduling at no Vercel cost.
+Vercel Hobby allows only **one run per day per cron**, so both jobs use daily schedules. With a daily reminder run, keep `reminder_offset_hours` at **≥ 24** (the default) so every booking is caught by the next run — a shorter window would miss bookings created between runs. For finer cadence (e.g. hourly reminders, frequent hold cleanup), upgrade to Pro, or apply `supabase/optional_pg_cron.sql` for in-DB scheduling at no Vercel cost.
 
 ### Deferred §10.2 modules
 
@@ -120,7 +120,7 @@ app/book/               visual booking flow
 app/admin/              login page
 app/admin/(panel)/      auth-guarded admin shell: dashboard, courts, bookings, templates, settings, reports
 app/api/admin/export/   CSV export endpoint
-app/api/cron/           scheduled jobs: release-holds (daily), send-reminders (hourly)
+app/api/cron/           scheduled jobs: release-holds (daily), send-reminders (daily)
 components/             ui · site · landing · booking · admin · contact · motion
 lib/                    supabase clients · booking · admin (queries, actions, audit, csv) · email · pricing · ics · validation
 emails/                 React Email templates
