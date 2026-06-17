@@ -69,6 +69,15 @@ export const closureSchema = z.object({
   reason: z.string().min(1, "Reason required"),
 });
 
+export const adminBookingSchema = z.object({
+  slot_ids: z.array(z.string().uuid()).min(1, "Pick at least one slot").max(6, "Up to 6 slots per booking"),
+  guest_name: z.string().min(1, "Name required"),
+  guest_email: z.string().email("Enter a valid email"),
+  guest_phone: z.string().min(1, "Phone required"),
+  notify: z.boolean().default(true),
+});
+export type AdminBookingInput = z.infer<typeof adminBookingSchema>;
+
 export type ConfirmBookingInput = z.infer<typeof confirmBookingSchema>;
 export type ContactInput = z.infer<typeof contactSchema>;
 export type GuestInput = z.infer<typeof guestSchema>;

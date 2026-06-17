@@ -1,6 +1,7 @@
 import { manilaDayRange } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Court, Closure, SlotStatus } from "@/lib/supabase/types";
+import type { Court, Closure, Slot, SlotStatus } from "@/lib/supabase/types";
+import { getSlotsForCourt } from "@/lib/booking/queries";
 
 export interface ScheduleCell { startsAt: string; status: SlotStatus; guestName: string | null }
 export interface ScheduleRow { court: Court; cells: ScheduleCell[] }
@@ -176,6 +177,16 @@ export async function searchBookings(
       startsAt: r.slots!.starts_at,
       endsAt: r.slots!.ends_at,
     }));
+}
+
+/** Free slots for one court on one Manila day (lapsed holds treated as free). */
+export async function getFreeSlotsForCourtDay(
+  supabase: SupabaseClient,
+  courtId: string,
+  dateKey: string,
+): Promise<Slot[]> {
+  const slots = await getSlotsForCourt(supabase, courtId, dateKey);
+  return slots.filter((s) => s.status === "free");
 }
 
 export interface AdminDay {

@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/supabase/server";
 import { recordAudit } from "@/lib/admin/audit";
-import { courtSchema, closureSchema } from "@/lib/validation";
-import { sendClosureNotice } from "@/lib/email/send";
-import type { CloseCourtRow } from "@/lib/supabase/types";
-import { searchBookings, type BookingFilters, type AdminBookingDetail } from "@/lib/admin/queries";
+import { courtSchema, closureSchema, adminBookingSchema } from "@/lib/validation";
+import { sendClosureNotice, sendBookingEmails } from "@/lib/email/send";
+import type { CloseCourtRow, AdminCreateResult } from "@/lib/supabase/types";
+import { searchBookings, getFreeSlotsForCourtDay, type BookingFilters, type AdminBookingDetail } from "@/lib/admin/queries";
+import type { Slot } from "@/lib/supabase/types";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -128,6 +129,71 @@ export async function searchBookingsAction(
 ): Promise<AdminBookingDetail[]> {
   await requireAdminEmail();
   return searchBookings(createAdminClient(), filters);
+}
+
+export async function getFreeSlotsAction(
+  courtId: string,
+  dateKey: string,
+): Promise<Slot[]> {
+  await requireAdminEmail();
+  return getFreeSlotsForCourtDay(createAdminClient(), courtId, dateKey);
+}
+
+export async function adminCreateBookingAction(input: unknown): Promise<ActionResult> {
+  const parsed = adminBookingSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid booking" };
+  const actor = await requireAdminEmail();
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.rpc("admin_create_booking", {
+    p_slot_ids: parsed.data.slot_ids,
+    p_guest_name: parsed.data.guest_name,
+    p_guest_email: parsed.data.guest_email,
+    p_guest_phone: parsed.data.guest_phone,
+    p_idempotency_key: `admin-${crypto.randomUUID()}`,
+    p_actor: actor,
+  });
+  if (error) return { ok: false, error: error.message };
+  const result = (Array.isArray(data) ? data[0] : data) as AdminCreateResult | undefined;
+  if (!result || result.status !== "confirmed") {
+    return {
+      ok: false,
+      error:
+        result?.status === "slot_closed"
+          ? "That slot is closed."
+          : "That slot was just taken.",
+    };
+  }
+
+  if (parsed.data.notify && result.cancel_token) {
+    try {
+      const { data: slotRows } = await supabase
+        .from("slots")
+        .select("starts_at,ends_at,court_id")
+        .in("id", parsed.data.slot_ids)
+        .order("starts_at");
+      const rows = (slotRows ?? []) as { starts_at: string; ends_at: string; court_id: string }[];
+      const { data: courtRow } = rows[0]
+        ? await supabase.from("courts").select("name").eq("id", rows[0].court_id).single()
+        : { data: null };
+      if (rows.length && courtRow) {
+        await sendBookingEmails({
+          courtName: (courtRow as { name: string }).name,
+          sessions: rows.map((s) => ({ startsAt: s.starts_at, endsAt: s.ends_at })),
+          guestName: parsed.data.guest_name,
+          guestEmail: parsed.data.guest_email,
+          guestPhone: parsed.data.guest_phone,
+          totalPriceCents: result.total_price_cents ?? 0,
+          cancelToken: result.cancel_token,
+        });
+      }
+    } catch (err) {
+      console.error("[adminCreateBookingAction] email failed:", err);
+    }
+  }
+
+  revalidatePath("/admin/bookings");
+  return { ok: true };
 }
 
 export async function upsertCourtAction(input: unknown): Promise<ActionResult> {
