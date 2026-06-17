@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/supabase/server";
 import { recordAudit } from "@/lib/admin/audit";
-import { courtSchema, closureSchema, adminBookingSchema, reassignSchema, templateSchema } from "@/lib/validation";
+import { courtSchema, closureSchema, adminBookingSchema, reassignSchema, templateSchema, settingsSchema } from "@/lib/validation";
 import { getTemplates } from "@/lib/admin/queries";
 import { sendClosureNotice, sendBookingEmails } from "@/lib/email/send";
 import { cancelBookingAction } from "@/lib/booking/actions";
@@ -322,6 +322,21 @@ export async function upsertTemplateAction(input: unknown): Promise<ActionResult
     detail: { subject, intro: intro ?? null },
   });
   revalidatePath("/admin/templates");
+  return { ok: true };
+}
+
+export async function updateSettingsAction(input: unknown): Promise<ActionResult> {
+  const parsed = settingsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid settings" };
+  const actor = await requireAdminEmail();
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("business_settings")
+    .update({ ...parsed.data, updated_at: new Date().toISOString(), updated_by: actor })
+    .eq("id", true);
+  if (error) return { ok: false, error: error.message };
+  await recordAudit(supabase, { actorEmail: actor, action: "settings.update", targetType: "settings", detail: parsed.data });
+  revalidatePath("/admin/settings");
   return { ok: true };
 }
 

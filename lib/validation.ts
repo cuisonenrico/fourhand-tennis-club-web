@@ -99,6 +99,19 @@ export const templateSchema = z.object({
 });
 export type TemplateInput = z.infer<typeof templateSchema>;
 
+export const settingsSchema = z.object({
+  club_name: z.string().min(1),
+  logo_path: z.string().nullable().optional(),
+  accent_hex: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  contact_email: z.string().email().nullable().optional(),
+  contact_phone: z.string().nullable().optional(),
+  default_open_time: z.string().regex(/^\d{2}:\d{2}$/),
+  default_close_time: z.string().regex(/^\d{2}:\d{2}$/),
+  cancellation_window_hours: z.number().int().min(0).max(168),
+  reminder_offset_hours: z.number().int().min(1).max(168),
+});
+export type SettingsInput = z.infer<typeof settingsSchema>;
+
 export type ConfirmBookingInput = z.infer<typeof confirmBookingSchema>;
 export type ContactInput = z.infer<typeof contactSchema>;
 export type GuestInput = z.infer<typeof guestSchema>;
