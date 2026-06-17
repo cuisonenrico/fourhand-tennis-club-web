@@ -23,7 +23,7 @@ export default async function CourtsPage() {
         <ClosurePanel courts={courts} closures={closures} />
       </section>
       <section>
-        <ScheduleGrid courts={courts} />
+        <ScheduleGrid />
       </section>
     </div>
   );

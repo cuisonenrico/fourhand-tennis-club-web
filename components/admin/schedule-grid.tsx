@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import {
   getScheduleGrid,
   type ScheduleGridData,
   type ScheduleCell,
 } from "@/lib/admin/queries";
-import type { Court } from "@/lib/supabase/types";
 import { AdminDateControl } from "./admin-date-control";
 import { todayKey, formatTime, formatDateLong } from "@/lib/utils";
 
@@ -65,7 +64,7 @@ function CellContent({ cell }: { cell: ScheduleCell }) {
   return null;
 }
 
-export function ScheduleGrid({ courts }: { courts: Court[] }) {
+export function ScheduleGrid() {
   const supabase = useMemo(() => createClient(), []);
   const [dateKey, setDateKey] = useState(todayKey);
   const [data, setData] = useState<ScheduleGridData | null>(null);
@@ -90,10 +89,9 @@ export function ScheduleGrid({ courts }: { courts: Court[] }) {
   );
 
   // Load on mount
-  useMemo(() => {
+  useEffect(() => {
     void load(dateKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dateKey, load]);
 
   function changeDate(dk: string) {
     setDateKey(dk);
