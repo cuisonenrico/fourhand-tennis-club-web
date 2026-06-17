@@ -8,6 +8,7 @@ import StaffNewBooking from "@/emails/staff-new-booking";
 import Cancellation from "@/emails/cancellation";
 import ContactAck from "@/emails/contact-ack";
 import ClosureNotice from "@/emails/closure-notice";
+import BookingReassigned from "@/emails/booking-reassigned";
 
 interface Session {
   startsAt: string;
@@ -128,6 +129,27 @@ export async function sendClosureNotice(ctx: {
       timeLabels: timeLabels(ctx.sessions),
       reason: ctx.reason,
       bookUrl: siteUrl("/book"),
+    }),
+  });
+}
+
+export async function sendBookingReassigned(ctx: {
+  courtName: string;
+  guestName: string;
+  guestEmail: string;
+  cancelToken: string;
+  sessions: Session[];
+}): Promise<void> {
+  await queueEmail({
+    type: "booking_reassigned",
+    to: ctx.guestEmail,
+    subject: `Your booking was moved — ${ctx.courtName}`,
+    react: BookingReassigned({
+      guestName: ctx.guestName,
+      courtName: ctx.courtName,
+      dateLabel: dateLabel(ctx.sessions),
+      timeLabels: timeLabels(ctx.sessions),
+      cancelUrl: siteUrl(`/cancel/${ctx.cancelToken}`),
     }),
   });
 }

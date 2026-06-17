@@ -7,6 +7,8 @@ import {
   searchBookingsAction,
   getFreeSlotsAction,
   adminCreateBookingAction,
+  adminCancelAction,
+  adminReassignAction,
 } from "@/lib/admin/actions";
 import { formatTimeRange, formatPrice } from "@/lib/utils";
 import type { AdminBookingDetail, BookingFilters } from "@/lib/admin/queries";
@@ -45,6 +47,251 @@ function StatusBadge({ status }: { status: "confirmed" | "cancelled" }) {
     <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-500">
       Cancelled
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cancel confirm dialog
+// ---------------------------------------------------------------------------
+
+interface CancelDialogProps {
+  cancelToken: string;
+  guestName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy: boolean;
+}
+
+function CancelDialog({ guestName, onConfirm, onCancel, busy }: CancelDialogProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-sm rounded-card border border-surface bg-white p-6 shadow-soft">
+        <h2 className="text-base font-semibold text-charcoal">Cancel booking?</h2>
+        <p className="mt-2 text-sm text-charcoal/70">
+          This will cancel all slots in {guestName}&apos;s booking group and send them a
+          cancellation email. This cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="h-10 rounded-lg border border-surface px-4 text-sm font-medium text-charcoal hover:bg-surface disabled:opacity-50"
+          >
+            Keep booking
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="h-10 rounded-lg bg-red-500 px-4 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+          >
+            {busy ? "Cancelling…" : "Cancel booking"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reassign panel
+// ---------------------------------------------------------------------------
+
+interface ReassignPanelProps {
+  booking: AdminBookingDetail;
+  courts: Court[];
+  slotCount: number; // number of slots in the group — must match
+  onSuccess: () => void;
+  onCancel: () => void;
+}
+
+function ReassignPanel({ booking, courts, slotCount, onSuccess, onCancel }: ReassignPanelProps) {
+  const [courtId, setCourtId] = useState(booking.courtId);
+  const [dateKey, setDateKey] = useState(() =>
+    new Date(booking.startsAt).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }),
+  );
+  const [freeSlots, setFreeSlots] = useState<Slot[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [slotError, setSlotError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadSlots(cId: string, dKey: string) {
+    if (!cId || !dKey) return;
+    setLoadingSlots(true);
+    setSlotError(null);
+    setFreeSlots([]);
+    setSelectedIds([]);
+    try {
+      const slots = await getFreeSlotsAction(cId, dKey);
+      setFreeSlots(slots);
+    } catch (err) {
+      setSlotError("Could not load slots. Please try again.");
+      console.error("[ReassignPanel] loadSlots failed:", err);
+    } finally {
+      setLoadingSlots(false);
+    }
+  }
+
+  function handleCourtChange(val: string) {
+    setCourtId(val);
+    loadSlots(val, dateKey);
+  }
+
+  function handleDateChange(val: string) {
+    setDateKey(val);
+    loadSlots(courtId, val);
+  }
+
+  function toggleSlot(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
+    );
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (selectedIds.length !== slotCount) {
+      setError(`Select exactly ${slotCount} slot${slotCount === 1 ? "" : "s"} to match the original booking.`);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const result = await adminReassignAction({
+        booking_group_id: booking.bookingGroupId ?? booking.id,
+        new_slot_ids: selectedIds,
+      });
+      if (!result.ok) {
+        setError(result.error);
+      } else {
+        onSuccess();
+      }
+    } catch (err) {
+      setError("Unexpected error. Please try again.");
+      console.error("[ReassignPanel] submit failed:", err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="rounded-card border border-surface bg-white shadow-soft">
+      <div className="flex items-center justify-between border-b border-surface px-5 py-4">
+        <h2 className="text-base font-semibold text-charcoal">
+          Reassign booking — {booking.guestName}
+        </h2>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded p-1 text-charcoal/50 hover:bg-surface hover:text-charcoal"
+          aria-label="Close"
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="divide-y divide-surface">
+        {/* Court + date */}
+        <div className="flex flex-wrap gap-4 px-5 py-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium uppercase tracking-wide text-charcoal/60">
+              Target court
+            </label>
+            <select
+              value={courtId}
+              onChange={(e) => handleCourtChange(e.target.value)}
+              required
+              className="h-10 rounded-lg border border-surface bg-white px-3 text-sm text-charcoal outline-none focus:border-green focus:ring-2 focus:ring-green/30"
+            >
+              <option value="">Select court…</option>
+              {courts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium uppercase tracking-wide text-charcoal/60">
+              Date
+            </label>
+            <AdminDateControl value={dateKey} onChange={handleDateChange} />
+          </div>
+        </div>
+
+        {/* Slot picker */}
+        <div className="px-5 py-4">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-charcoal/60">
+            Free slots{" "}
+            <span className="ml-1 normal-case text-charcoal/40">
+              (select {slotCount} to match)
+            </span>
+            {selectedIds.length > 0 && (
+              <span
+                className={`ml-2 ${
+                  selectedIds.length === slotCount ? "text-green" : "text-amber-500"
+                }`}
+              >
+                {selectedIds.length}/{slotCount} selected
+              </span>
+            )}
+          </p>
+
+          {!courtId ? (
+            <p className="text-sm text-charcoal/50">Select a court and date to see slots.</p>
+          ) : loadingSlots ? (
+            <p className="text-sm text-charcoal/50">Loading slots…</p>
+          ) : slotError ? (
+            <p className="text-sm text-red-500">{slotError}</p>
+          ) : freeSlots.length === 0 ? (
+            <p className="text-sm text-charcoal/50">No free slots on this day.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {freeSlots.map((slot) => {
+                const selected = selectedIds.includes(slot.id);
+                return (
+                  <button
+                    key={slot.id}
+                    type="button"
+                    onClick={() => toggleSlot(slot.id)}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      selected
+                        ? "border-green bg-green text-white"
+                        : "border-surface bg-white text-charcoal hover:border-green/50"
+                    }`}
+                  >
+                    {formatTimeRange(slot.starts_at, slot.ends_at)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Submit row */}
+        <div className="flex flex-wrap items-center justify-end gap-3 px-5 py-4">
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+            className="h-10 rounded-lg border border-surface px-4 text-sm font-medium text-charcoal hover:bg-surface disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting || selectedIds.length !== slotCount}
+            className="h-10 rounded-lg bg-green px-4 text-sm font-medium text-white disabled:opacity-50 hover:bg-green/90"
+          >
+            {submitting ? "Reassigning…" : "Reassign"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -322,6 +569,12 @@ export function BookingsManager({ courts, initialBookings, initialDateKey }: Pro
   const [isPending, startTransition] = useTransition();
   const [showNewPanel, setShowNewPanel] = useState(false);
 
+  // Cancel + reassign state
+  const [cancelTarget, setCancelTarget] = useState<AdminBookingDetail | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [reassignTarget, setReassignTarget] = useState<AdminBookingDetail | null>(null);
+
   type FilterOverrides = {
     dateKey?: string;
     courtId?: string;
@@ -388,6 +641,31 @@ export function BookingsManager({ courts, initialBookings, initialDateKey }: Pro
     applyFilters();
   }
 
+  async function handleCancelConfirm() {
+    if (!cancelTarget) return;
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      const result = await adminCancelAction(cancelTarget.cancelToken);
+      if (!result.ok) {
+        setCancelError(result.error);
+      } else {
+        setCancelTarget(null);
+        applyFilters();
+      }
+    } catch (err) {
+      setCancelError("Unexpected error. Please try again.");
+      console.error("[BookingsManager] cancel failed:", err);
+    } finally {
+      setCancelBusy(false);
+    }
+  }
+
+  function handleReassignSuccess() {
+    setReassignTarget(null);
+    applyFilters();
+  }
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -412,6 +690,39 @@ export function BookingsManager({ courts, initialBookings, initialDateKey }: Pro
           onSuccess={handleNewBookingSuccess}
           onCancel={() => setShowNewPanel(false)}
         />
+      )}
+
+      {/* Reassign panel */}
+      {reassignTarget && (
+        <ReassignPanel
+          booking={reassignTarget}
+          courts={courts}
+          slotCount={
+            bookings.filter(
+              (b) =>
+                b.bookingGroupId !== null &&
+                b.bookingGroupId === reassignTarget.bookingGroupId,
+            ).length || 1
+          }
+          onSuccess={handleReassignSuccess}
+          onCancel={() => setReassignTarget(null)}
+        />
+      )}
+
+      {/* Cancel confirm dialog (modal) */}
+      {cancelTarget && (
+        <>
+          <CancelDialog
+            cancelToken={cancelTarget.cancelToken}
+            guestName={cancelTarget.guestName}
+            onConfirm={handleCancelConfirm}
+            onCancel={() => { setCancelTarget(null); setCancelError(null); }}
+            busy={cancelBusy}
+          />
+          {cancelError && (
+            <p className="text-sm text-red-500">{cancelError}</p>
+          )}
+        </>
       )}
 
       {/* Filter bar */}
@@ -521,8 +832,27 @@ export function BookingsManager({ courts, initialBookings, initialDateKey }: Pro
                   <td className="px-4 py-3">
                     <StatusBadge status={b.status} />
                   </td>
-                  {/* Per-row actions wired in Task 10 */}
-                  <td className="px-4 py-3">{/* reserved */}</td>
+                  {/* Per-row actions */}
+                  <td className="px-4 py-3">
+                    {b.status === "confirmed" && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setReassignTarget(b); }}
+                          className="rounded-lg border border-surface px-2.5 py-1 text-xs font-medium text-charcoal hover:bg-surface"
+                        >
+                          Reassign
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setCancelTarget(b); setCancelError(null); }}
+                          className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

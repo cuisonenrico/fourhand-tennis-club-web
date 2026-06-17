@@ -78,6 +78,12 @@ export const adminBookingSchema = z.object({
 });
 export type AdminBookingInput = z.infer<typeof adminBookingSchema>;
 
+export const reassignSchema = z.object({
+  booking_group_id: z.string().uuid(),
+  new_slot_ids: z.array(z.string().uuid()).min(1).max(6),
+});
+export type ReassignInput = z.infer<typeof reassignSchema>;
+
 export type ConfirmBookingInput = z.infer<typeof confirmBookingSchema>;
 export type ContactInput = z.infer<typeof contactSchema>;
 export type GuestInput = z.infer<typeof guestSchema>;

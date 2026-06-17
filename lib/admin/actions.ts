@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/supabase/server";
 import { recordAudit } from "@/lib/admin/audit";
-import { courtSchema, closureSchema, adminBookingSchema } from "@/lib/validation";
+import { courtSchema, closureSchema, adminBookingSchema, reassignSchema } from "@/lib/validation";
 import { sendClosureNotice, sendBookingEmails } from "@/lib/email/send";
+import { cancelBookingAction } from "@/lib/booking/actions";
+import type { AdminReassignResult } from "@/lib/supabase/types";
 import type { CloseCourtRow, AdminCreateResult } from "@/lib/supabase/types";
 import { searchBookings, getFreeSlotsForCourtDay, type BookingFilters, type AdminBookingDetail } from "@/lib/admin/queries";
 import type { Slot } from "@/lib/supabase/types";
@@ -192,6 +194,81 @@ export async function adminCreateBookingAction(input: unknown): Promise<ActionRe
     }
   }
 
+  revalidatePath("/admin/bookings");
+  return { ok: true };
+}
+
+export async function adminCancelAction(cancelToken: string): Promise<ActionResult> {
+  const actor = await requireAdminEmail();
+  const res = await cancelBookingAction(cancelToken);
+  if (res.status === "error") return { ok: false, error: res.message };
+  await recordAudit(createAdminClient(), {
+    actorEmail: actor,
+    action: "booking.cancel",
+    targetType: "booking",
+    targetId: cancelToken,
+  });
+  revalidatePath("/admin/bookings");
+  return { ok: true };
+}
+
+export async function adminReassignAction(input: unknown): Promise<ActionResult> {
+  const parsed = reassignSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid reassignment" };
+  const actor = await requireAdminEmail();
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("admin_reassign_booking", {
+    p_booking_group_id: parsed.data.booking_group_id,
+    p_new_slot_ids: parsed.data.new_slot_ids,
+    p_actor: actor,
+  });
+  if (error) return { ok: false, error: error.message };
+  const result = (Array.isArray(data) ? data[0] : data) as AdminReassignResult | undefined;
+  if (!result || result.status !== "reassigned") return { ok: false, error: "Target slot was just taken." };
+
+  // Notify the player of the new details (best-effort).
+  try {
+    const { data: rows } = await supabase
+      .from("bookings")
+      .select("guest_name,guest_email,cancel_token,court_id,slots!inner(starts_at,ends_at)")
+      .eq("booking_group_id", parsed.data.booking_group_id)
+      .eq("status", "confirmed")
+      .order("starts_at", { foreignTable: "slots" });
+    const list = (rows ?? []) as unknown as {
+      guest_name: string;
+      guest_email: string;
+      cancel_token: string;
+      court_id: string;
+      slots: { starts_at: string; ends_at: string } | null;
+    }[];
+    if (list.length) {
+      const { data: court } = await supabase
+        .from("courts")
+        .select("name")
+        .eq("id", list[0].court_id)
+        .single();
+      const { sendBookingReassigned } = await import("@/lib/email/send");
+      await sendBookingReassigned({
+        courtName: (court as { name: string } | null)?.name ?? "Court",
+        guestName: list[0].guest_name,
+        guestEmail: list[0].guest_email,
+        cancelToken: list[0].cancel_token,
+        sessions: list
+          .filter((r) => r.slots)
+          .map((r) => ({ startsAt: r.slots!.starts_at, endsAt: r.slots!.ends_at })),
+      });
+    }
+  } catch (err) {
+    console.error("[adminReassignAction] email failed:", err);
+  }
+
+  await recordAudit(supabase, {
+    actorEmail: actor,
+    action: "booking.reassign",
+    targetType: "booking_group",
+    targetId: parsed.data.booking_group_id,
+    detail: { new_slot_ids: parsed.data.new_slot_ids },
+  });
   revalidatePath("/admin/bookings");
   return { ok: true };
 }
