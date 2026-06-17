@@ -102,6 +102,82 @@ export interface AdminBooking {
   endsAt: string;
 }
 
+export interface BookingFilters {
+  dateKey?: string;
+  courtId?: string;
+  status?: "confirmed" | "cancelled";
+  q?: string; // name or email substring
+}
+
+export interface AdminBookingDetail extends AdminBooking {
+  guestEmail: string;
+  guestPhone: string;
+  bookingGroupId: string | null;
+  cancelToken: string;
+  source: string;
+  courtId: string;
+  slotId: string;
+}
+
+export async function searchBookings(
+  supabase: SupabaseClient,
+  f: BookingFilters,
+): Promise<AdminBookingDetail[]> {
+  let query = supabase
+    .from("bookings")
+    .select(
+      "id,guest_name,guest_email,guest_phone,status,price_cents,source,court_id,slot_id,booking_group_id,cancel_token,slots!inner(starts_at,ends_at),courts!inner(name)",
+    )
+    .order("starts_at", { foreignTable: "slots", ascending: false })
+    .limit(200);
+
+  if (f.status) query = query.eq("status", f.status);
+  if (f.courtId) query = query.eq("court_id", f.courtId);
+  if (f.dateKey) {
+    const { startIso, endIso } = manilaDayRange(f.dateKey);
+    query = query.gte("slots.starts_at", startIso).lt("slots.starts_at", endIso);
+  }
+  if (f.q) query = query.or(`guest_name.ilike.%${f.q}%,guest_email.ilike.%${f.q}%`);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  type Row = {
+    id: string;
+    guest_name: string;
+    guest_email: string;
+    guest_phone: string;
+    status: "confirmed" | "cancelled";
+    price_cents: number;
+    source: string;
+    court_id: string;
+    slot_id: string;
+    booking_group_id: string | null;
+    cancel_token: string;
+    slots: { starts_at: string; ends_at: string } | null;
+    courts: { name: string } | null;
+  };
+
+  return ((data ?? []) as unknown as Row[])
+    .filter((r) => r.slots && r.courts)
+    .map((r) => ({
+      id: r.id,
+      guestName: r.guest_name,
+      guestEmail: r.guest_email,
+      guestPhone: r.guest_phone,
+      status: r.status,
+      priceCents: r.price_cents,
+      source: r.source,
+      courtId: r.court_id,
+      slotId: r.slot_id,
+      bookingGroupId: r.booking_group_id,
+      cancelToken: r.cancel_token,
+      courtName: r.courts!.name,
+      startsAt: r.slots!.starts_at,
+      endsAt: r.slots!.ends_at,
+    }));
+}
+
 export interface AdminDay {
   bookings: AdminBooking[];
   courtCount: number;

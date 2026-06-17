@@ -7,6 +7,7 @@ import { recordAudit } from "@/lib/admin/audit";
 import { courtSchema, closureSchema } from "@/lib/validation";
 import { sendClosureNotice } from "@/lib/email/send";
 import type { CloseCourtRow } from "@/lib/supabase/types";
+import { searchBookings, type BookingFilters, type AdminBookingDetail } from "@/lib/admin/queries";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -117,6 +118,17 @@ export async function reopenClosureAction(id: string): Promise<ActionResult> {
 // ---------------------------------------------------------------------------
 // Court actions
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Booking actions
+// ---------------------------------------------------------------------------
+
+export async function searchBookingsAction(
+  filters: BookingFilters,
+): Promise<AdminBookingDetail[]> {
+  await requireAdminEmail();
+  return searchBookings(createAdminClient(), filters);
+}
 
 export async function upsertCourtAction(input: unknown): Promise<ActionResult> {
   const parsed = courtSchema.safeParse(input);
