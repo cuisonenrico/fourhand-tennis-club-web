@@ -7,6 +7,7 @@ import BookingConfirmation from "@/emails/booking-confirmation";
 import StaffNewBooking from "@/emails/staff-new-booking";
 import Cancellation from "@/emails/cancellation";
 import ContactAck from "@/emails/contact-ack";
+import ClosureNotice from "@/emails/closure-notice";
 
 interface Session {
   startsAt: string;
@@ -104,6 +105,28 @@ export async function sendCancellationEmail(ctx: {
       courtName: ctx.courtName,
       dateLabel: dateLabel(ctx.sessions),
       timeLabels: timeLabels(ctx.sessions),
+      bookUrl: siteUrl("/book"),
+    }),
+  });
+}
+
+export async function sendClosureNotice(ctx: {
+  courtName: string;
+  guestName: string;
+  guestEmail: string;
+  reason: string;
+  sessions: Session[];
+}): Promise<void> {
+  await queueEmail({
+    type: "closure_notice",
+    to: ctx.guestEmail,
+    subject: `Court closed — ${ctx.courtName}`,
+    react: ClosureNotice({
+      guestName: ctx.guestName,
+      courtName: ctx.courtName,
+      dateLabel: dateLabel(ctx.sessions),
+      timeLabels: timeLabels(ctx.sessions),
+      reason: ctx.reason,
       bookUrl: siteUrl("/book"),
     }),
   });

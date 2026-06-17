@@ -1,6 +1,23 @@
 import { manilaDayRange } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Court } from "@/lib/supabase/types";
+import type { Court, Closure } from "@/lib/supabase/types";
+
+export interface ActiveClosure extends Closure {
+  courtName: string;
+}
+
+export async function getActiveClosures(supabase: SupabaseClient): Promise<ActiveClosure[]> {
+  const { data, error } = await supabase
+    .from("closures")
+    .select("*, courts!inner(name)")
+    .eq("status", "active")
+    .order("starts_at");
+  if (error) throw error;
+  return ((data ?? []) as unknown as (Closure & { courts: { name: string } })[]).map((c) => ({
+    ...c,
+    courtName: c.courts.name,
+  }));
+}
 
 /** All courts (incl. maintenance) in display order, for admin. */
 export async function getCourtsAdmin(supabase: SupabaseClient): Promise<Court[]> {

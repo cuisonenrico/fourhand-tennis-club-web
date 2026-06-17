@@ -62,6 +62,13 @@ export const courtSchema = z.object({
 });
 export type CourtInput = z.infer<typeof courtSchema>;
 
+export const closureSchema = z.object({
+  court_id: z.string().uuid(),
+  starts_at: z.string().datetime({ offset: true }),
+  ends_at: z.string().datetime({ offset: true }),
+  reason: z.string().min(1, "Reason required"),
+});
+
 export type ConfirmBookingInput = z.infer<typeof confirmBookingSchema>;
 export type ContactInput = z.infer<typeof contactSchema>;
 export type GuestInput = z.infer<typeof guestSchema>;
